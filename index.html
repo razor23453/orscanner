@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Event Check-in</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#1f6feb">
+<script src="html5-qrcode.min.js"></script>
+<style>
+  :root { --bg: #f2f2f2; --card: #ffffff; --text: #1b1b1b; --line: #c9c9c9; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121212; --card: #1e1e1e; --text: #eeeeee; --line: #444444; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, Arial, sans-serif; }
+  .wrap { max-width: 480px; margin: 0 auto; padding: 12px; }
+  select, input, button {
+    width: 100%; min-height: 52px; font-size: 18px; padding: 0 12px;
+    border: 1px solid var(--line); border-radius: 8px;
+    background: var(--card); color: var(--text);
+  }
+  button { font-weight: bold; }
+  #count { font-size: 26px; font-weight: bold; text-align: center; margin: 12px 0; }
+  #reader { width: 100%; background: #000; border-radius: 8px; overflow: hidden; }
+  #start { margin: 10px 0; background: #1f6feb; color: #fff; border: 0; }
+  #result {
+    margin: 10px 0; padding: 16px; min-height: 110px; text-align: center;
+    border-radius: 8px; background: var(--card); border: 1px solid var(--line);
+  }
+  #result .name { font-size: 28px; font-weight: bold; }
+  #result .info { font-size: 18px; margin-top: 6px; }
+  #result.ok { background: #2e9e4f; border-color: #2e9e4f; color: #fff; }
+  #result.dupe { background: #f5a623; border-color: #f5a623; color: #000; }
+  #result.bad { background: #d63031; border-color: #d63031; color: #fff; }
+  .row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .row input { flex: 1; }
+  .row button { width: 120px; }
+  #status { font-size: 14px; text-align: center; margin-top: 12px; opacity: 0.8; }
+  #reload, #clear { width: auto; min-height: 44px; border: 0; background: none; font-size: 14px; font-weight: normal; text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <select id="event"></select>
+  <div id="count">0 / 0 checked in</div>
+
+  <div id="reader"></div>
+  <button id="start">Start camera</button>
+
+  <div id="result"><div class="name">Ready</div><div class="info"></div></div>
+
+  <div class="row">
+    <input id="manual" placeholder="Type student ID">
+    <button id="manualBtn">Check in</button>
+  </div>
+  <button id="undo">Undo last scan</button>
+
+  <div id="status"></div>
+  <div style="text-align:center">
+    <button id="reload">Reload student list</button>
+    <button id="clear">Clear data from this phone</button>
+  </div>
+</div>
+
+<script>
+var API_URL = 'PASTE_WEB_APP_URL_HERE';
+var KEY = 'PASTE_SECRET_KEY_HERE';
+
+var students = {};
+var studentCount = 0;
+var events = [];
+var serverScans = [];
+var queue = load('attend_queue', []);
+var done = {};
+var lastId = '';
+var lastTime = 0;
+var lastUid = null;
+var sending = [];
+var lastError = '';
+var busy = false;
+var cleared = false;
+var scanner = null;
+var audio = null;
+
+function $(id) { return document.getElementById(id); }
+
+function load(key, fallback) {
+  try {
+    return JSON.parse(localStorage.getItem(key)) || fallback;
+  } catch (e) {
+    return fallback;
+  }
+}
+
+function save(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {}
+}
+
+// fetch that gives up after 15 seconds so weak wifi doesn't hang the sync
+function call(url, options) {
+  var ctrl = new AbortController();
+  var timer = setTimeout(function () { ctrl.abort(); }, 15000);
+  options = options || {};
+  options.signal = ctrl.signal;
+  return fetch(url, options).then(function (r) {
+    clearTimeout(timer);
+    return r.json();
+  }, function (err) {
+    clearTimeout(timer);
+    throw err;
+  });
+}
+
+// ---------- data ----------
+
+function useData(data) {
+  students = {};
+  data.students.forEach(function (r) {
+    students[r[0]] = { name: r[1], grade: r[2], course: r[3] };
+  });
+  studentCount = data.students.length;
+  events = data.events;
+  serverScans = data.scans;
+  fillEvents();
+  rebuildDone();
+  showCount();
+}
+
+function loadAll() {
+  if (cleared) return;
+  call(API_URL + '?key=' + encodeURIComponent(KEY)).then(function (data) {
+    if (!data.ok) {
+      lastError = 'server says: ' + data.error;
+      showStatus();
+      return;
+    }
+    save('attend_cache', data);
+    useData(data);
+  }).catch(function () {
+    if (!events.length) {
+      show('', 'No connection', 'Connect once to download the student list');
+    }
+  });
+}
+
+function fillEvents() {
+  var box = $('event');
+  var keep = box.value || localStorage.getItem('attend_event') || '';
+  if (events.indexOf(keep) === -1) keep = '';
+  box.innerHTML = '<option value="">Choose event...</option>';
+  events.forEach(function (name) {
+    var o = document.createElement('option');
+    o.value = name;
+    o.textContent = name;
+    box.appendChild(o);
+  });
+  box.value = keep;
+}
+
+function mark(ev, id) {
+  if (!done[ev]) done[ev] = {};
+  done[ev][id] = true;
+}
+
+function rebuildDone() {
+  done = {};
+  serverScans.forEach(function (s) { mark(s[0], s[1]); });
+  queue.forEach(function (s) { mark(s.event, s.id); });
+}
+
+// ---------- scanning ----------
+
+function checkIn(text, manual) {
+  var id = String(text).trim();
+  var ev = $('event').value;
+  var now = Date.now();
+  if (!id) return;
+
+  // same card within 3 seconds is ignored
+  if (!manual && id === lastId && now - lastTime < 3000) return;
+  lastId = id;
+  lastTime = now;
+
+  if (!ev) {
+    show('bad', 'Choose an event first', '');
+    return;
+  }
+
+  var s = students[id];
+
+  if (done[ev] && done[ev][id]) {
+    show('dupe', s ? s.name : 'GUEST', 'Already checked in');
+    return;
+  }
+
+  var item = {
+    uid: now + '-' + Math.random().toString(36).slice(2, 7),
+    event: ev,
+    id: id,
+    time: new Date().toISOString()
+  };
+  queue.push(item);
+  save('attend_queue', queue);
+  lastUid = item.uid;
+  mark(ev, id);
+  showCount();
+  showStatus();
+
+  if (s) {
+    show('ok', s.name, 'Grade ' + s.grade + ' - ' + s.course);
+  } else {
+    show('bad', 'Unknown ID', id + ' saved as GUEST');
+  }
+}
+
+function show(kind, title, info) {
+  var box = $('result');
+  box.className = kind;
+  box.querySelector('.name').textContent = title;
+  box.querySelector('.info').textContent = info;
+  if (kind) feedback(kind);
+}
+
+function feedback(kind) {
+  if (navigator.vibrate) {
+    navigator.vibrate(kind === 'ok' ? 100 : [150, 80, 150]);
+  }
+  if (!audio) return;
+  var tones = {
+    ok: [[880, 0.12]],
+    dupe: [[440, 0.12], [440, 0.12]],
+    bad: [[220, 0.4]]
+  };
+  var t = audio.currentTime;
+  tones[kind].forEach(function (tone, i) {
+    var osc = audio.createOscillator();
+    var gain = audio.createGain();
+    osc.frequency.value = tone[0];
+    gain.gain.value = 0.2;
+    osc.connect(gain);
+    gain.connect(audio.destination);
+    osc.start(t + i * 0.2);
+    osc.stop(t + i * 0.2 + tone[1]);
+  });
+}
+
+function showCount() {
+  var ids = done[$('event').value] || {};
+  var n = 0;
+  var guests = 0;
+  for (var id in ids) {
+    if (students[id]) n++;
+    else guests++;
+  }
+  var text = n + ' / ' + studentCount + ' checked in';
+  if (guests) text += ' (+' + guests + ' guest' + (guests > 1 ? 's' : '') + ')';
+  $('count').textContent = text;
+}
+
+function showStatus() {
+  var text = (navigator.onLine ? 'Online' : 'Offline') + ' - ' + queue.length + ' waiting to sync';
+  if (lastError) text += ' - ' + lastError;
+  $('status').textContent = text;
+}
+
+// ---------- syncing ----------
+
+function tick() {
+  if (cleared || busy || !navigator.onLine) return;
+  busy = true;
+  var batch = queue.slice();
+  sending = batch.map(function (b) { return b.uid; });
+
+  var step = batch.length ? send(batch) : Promise.resolve();
+  step.then(function () {
+    return call(API_URL + '?key=' + encodeURIComponent(KEY) + '&part=scans');
+  }).then(function (data) {
+    if (!data.ok) throw new Error(data.error);
+    serverScans = data.scans;
+    var cache = load('attend_cache', null);
+    if (cache) {
+      cache.scans = data.scans;
+      save('attend_cache', cache);
+    }
+    lastError = '';
+    rebuildDone();
+    showCount();
+  }).catch(function (err) {
+    lastError = err.message === 'bad key' ? 'wrong secret key' : 'will retry';
+  }).then(function () {
+    busy = false;
+    sending = [];
+    showStatus();
+    if (!events.length) loadAll();
+  });
+}
+
+function send(batch) {
+  return call(API_URL, {
+    method: 'POST',
+    body: JSON.stringify({ key: KEY, scans: batch })
+  }).then(function (res) {
+    if (!res.ok) throw new Error(res.error);
+    var sent = {};
+    batch.forEach(function (b) { sent[b.uid] = true; });
+    queue = queue.filter(function (q) { return !sent[q.uid]; });
+    save('attend_queue', queue);
+  });
+}
+
+// ---------- buttons ----------
+
+$('start').onclick = function () {
+  if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)();
+  if (scanner) return;
+  scanner = new Html5Qrcode('reader', {
+    formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
+  });
+  scanner.start(
+    { facingMode: 'environment' },
+    {
+      fps: 10,
+      qrbox: function (w, h) {
+        var size = Math.floor(Math.min(w, h) * 0.7);
+        return { width: size, height: size };
+      }
+    },
+    function (text) { checkIn(text, false); }
+  ).then(function () {
+    $('start').style.display = 'none';
+  }).catch(function () {
+    scanner = null;
+    show('bad', 'Camera problem', 'Allow camera access and try again');
+  });
+};
+
+$('manualBtn').onclick = function () {
+  checkIn($('manual').value, true);
+  $('manual').value = '';
+};
+
+$('manual').onkeydown = function (e) {
+  if (e.key === 'Enter') $('manualBtn').onclick();
+};
+
+$('undo').onclick = function () {
+  var i = queue.findIndex(function (q) { return q.uid === lastUid; });
+  if (lastUid !== null && sending.indexOf(lastUid) !== -1) {
+    show('dupe', 'Too late', 'That scan is already being sent');
+    return;
+  }
+  if (i === -1) {
+    show('dupe', 'Cannot undo', 'Last scan is already synced');
+    return;
+  }
+  queue.splice(i, 1);
+  save('attend_queue', queue);
+  lastUid = null;
+  lastId = '';
+  rebuildDone();
+  showCount();
+  showStatus();
+  show('', 'Scan removed', '');
+};
+
+$('event').onchange = function () {
+  localStorage.setItem('attend_event', this.value);
+  showCount();
+};
+
+$('reload').onclick = function () {
+  cleared = false;
+  loadAll();
+};
+
+// wipes the student list and saved scans from this phone
+$('clear').onclick = function () {
+  var warning = queue.length
+    ? queue.length + ' scans have not synced yet and will be lost. Clear anyway?'
+    : 'Remove the student list from this phone?';
+  if (!confirm(warning)) return;
+  try {
+    localStorage.removeItem('attend_cache');
+    localStorage.removeItem('attend_queue');
+    localStorage.removeItem('attend_event');
+  } catch (e) {}
+  cleared = true;
+  students = {};
+  studentCount = 0;
+  events = [];
+  serverScans = [];
+  queue = [];
+  done = {};
+  fillEvents();
+  showCount();
+  showStatus();
+  show('', 'Data cleared', 'Close the app. Tap Reload to download the list again.');
+};
+window.addEventListener('online', function () { showStatus(); tick(); });
+window.addEventListener('offline', showStatus);
+
+// ---------- start ----------
+
+var cached = load('attend_cache', null);
+if (cached) useData(cached);
+showStatus();
+loadAll();
+setInterval(tick, 10000);
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js');
+}
+</script>
+</body>
+</html>
