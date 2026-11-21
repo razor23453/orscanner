@@ -37,6 +37,10 @@
   .row { display: flex; gap: 8px; margin-bottom: 10px; }
   .row input { flex: 1; }
   .row button { width: 120px; }
+  .mode { display: flex; gap: 8px; margin-top: 10px; }
+  .mode button { flex: 1; width: auto; }
+  #modeIn.on { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  #modeOut.on { background: #7b3fe4; border-color: #7b3fe4; color: #fff; }
   #status { font-size: 14px; text-align: center; margin-top: 12px; opacity: 0.8; }
   #reload, #clear { width: auto; min-height: 44px; border: 0; background: none; font-size: 14px; font-weight: normal; text-decoration: underline; }
 </style>
@@ -44,6 +48,10 @@
 <body>
 <div class="wrap">
   <select id="event"></select>
+  <div class="mode">
+    <button id="modeIn">Time in</button>
+    <button id="modeOut">Time out</button>
+  </div>
   <div id="count">0 / 0 checked in</div>
 
   <div id="reader"></div>
@@ -81,6 +89,10 @@ var sending = [];
 var lastError = '';
 var busy = false;
 var cleared = false;
+var mode = 'IN';
+try {
+  if (localStorage.getItem('attend_mode') === 'OUT') mode = 'OUT';
+} catch (e) {}
 var scanner = null;
 var audio = null;
 
@@ -161,15 +173,21 @@ function fillEvents() {
   box.value = keep;
 }
 
-function mark(ev, id) {
-  if (!done[ev]) done[ev] = {};
-  done[ev][id] = true;
+function mark(ev, id, type) {
+  var key = ev + '|' + type;
+  if (!done[key]) done[key] = {};
+  done[key][id] = true;
+}
+
+function isDone(ev, id, type) {
+  var list = done[ev + '|' + type];
+  return !!(list && list[id]);
 }
 
 function rebuildDone() {
   done = {};
-  serverScans.forEach(function (s) { mark(s[0], s[1]); });
-  queue.forEach(function (s) { mark(s.event, s.id); });
+  serverScans.forEach(function (s) { mark(s[0], s[1], s[2] || 'IN'); });
+  queue.forEach(function (s) { mark(s.event, s.id, s.type || 'IN'); });
 }
 
 // ---------- scanning ----------
@@ -191,29 +209,39 @@ function checkIn(text, manual) {
   }
 
   var s = students[id];
+  var out = mode === 'OUT';
 
-  if (done[ev] && done[ev][id]) {
-    show('dupe', s ? s.name : 'GUEST', 'Already checked in');
+  if (isDone(ev, id, mode)) {
+    show('dupe', s ? s.name : 'GUEST', out ? 'Already checked out' : 'Already checked in');
     return;
   }
+
+  // leaving without ever checking in is still saved, but flagged
+  var noIn = out && !isDone(ev, id, 'IN');
 
   var item = {
     uid: now + '-' + Math.random().toString(36).slice(2, 7),
     event: ev,
     id: id,
+    type: mode,
     time: new Date().toISOString()
   };
   queue.push(item);
   save('attend_queue', queue);
   lastUid = item.uid;
-  mark(ev, id);
+  mark(ev, id, mode);
   showCount();
   showStatus();
 
-  if (s) {
-    show('ok', s.name, 'Grade ' + s.grade + ' - ' + s.course);
-  } else {
+  var info = s ? 'Grade ' + s.grade + ' - ' + s.course : '';
+  if (!s) {
     show('bad', 'Unknown ID', id + ' saved as GUEST');
+  } else if (noIn) {
+    show('dupe', s.name, 'Checked out, but no check-in found');
+  } else if (out) {
+    show('ok', s.name, 'Checked out - ' + info);
+  } else {
+    show('ok', s.name, info);
   }
 }
 
@@ -249,15 +277,19 @@ function feedback(kind) {
 }
 
 function showCount() {
-  var ids = done[$('event').value] || {};
+  var ev = $('event').value;
+  var ins = done[ev + '|IN'] || {};
+  var outs = done[ev + '|OUT'] || {};
   var n = 0;
   var guests = 0;
-  for (var id in ids) {
+  for (var id in ins) {
     if (students[id]) n++;
     else guests++;
   }
   var text = n + ' / ' + studentCount + ' checked in';
   if (guests) text += ' (+' + guests + ' guest' + (guests > 1 ? 's' : '') + ')';
+  var left = Object.keys(outs).length;
+  if (left) text += ' - ' + left + ' out';
   $('count').textContent = text;
 }
 
@@ -372,6 +404,17 @@ $('event').onchange = function () {
   showCount();
 };
 
+function setMode(m) {
+  mode = m;
+  lastId = '';
+  try { localStorage.setItem('attend_mode', m); } catch (e) {}
+  $('modeIn').className = m === 'IN' ? 'on' : '';
+  $('modeOut').className = m === 'OUT' ? 'on' : '';
+}
+
+$('modeIn').onclick = function () { setMode('IN'); };
+$('modeOut').onclick = function () { setMode('OUT'); };
+
 $('reload').onclick = function () {
   cleared = false;
   loadAll();
@@ -405,6 +448,7 @@ window.addEventListener('offline', showStatus);
 
 // ---------- start ----------
 
+setMode(mode);
 var cached = load('attend_cache', null);
 if (cached) useData(cached);
 showStatus();
