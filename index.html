@@ -37,6 +37,29 @@
   .row { display: flex; gap: 8px; margin-bottom: 10px; }
   .row input { flex: 1; }
   .row button { width: 120px; }
+  .hide { display: none; }
+  .tabs { display: flex; gap: 8px; margin-top: 10px; }
+  .tabs button { flex: 1; width: auto; }
+  .tabs button.on, .chips button.on { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px; text-align: center; }
+  .tile b { display: block; font-size: 28px; }
+  .tile span { font-size: 13px; opacity: 0.8; }
+  #search { margin-bottom: 10px; }
+  .chips { display: flex; gap: 6px; margin-bottom: 10px; }
+  .chips button { flex: 1; width: auto; min-height: 44px; padding: 0 6px; font-size: 15px; }
+  .person {
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    padding: 10px 12px; margin-bottom: 6px; background: var(--card);
+    border: 1px solid var(--line); border-left: 6px solid var(--line); border-radius: 8px;
+  }
+  .person.inside { border-left-color: #2e9e4f; }
+  .person.out { border-left-color: #7b3fe4; }
+  .person.guest { border-left-color: #d63031; }
+  .person .who { font-weight: bold; font-size: 17px; }
+  .person .sub { font-size: 13px; opacity: 0.75; }
+  .person .times { text-align: right; font-size: 14px; white-space: nowrap; }
+  .empty { text-align: center; padding: 20px; opacity: 0.7; }
   .mode { display: flex; gap: 8px; margin-top: 10px; }
   .mode button { flex: 1; width: auto; }
   #modeIn.on { background: #1f6feb; border-color: #1f6feb; color: #fff; }
@@ -48,22 +71,46 @@
 <body>
 <div class="wrap">
   <select id="event"></select>
-  <div class="mode">
-    <button id="modeIn">Time in</button>
-    <button id="modeOut">Time out</button>
+  <div class="tabs">
+    <button id="tabScan" class="on">Scan</button>
+    <button id="tabDash">Dashboard</button>
   </div>
   <div id="count">0 / 0 checked in</div>
 
-  <div id="reader"></div>
-  <button id="start">Start camera</button>
+  <div id="scanView">
+    <div class="mode">
+      <button id="modeIn">Time in</button>
+      <button id="modeOut">Time out</button>
+    </div>
 
-  <div id="result"><div class="name">Ready</div><div class="info"></div></div>
+    <div id="reader"></div>
+    <button id="start">Start camera</button>
 
-  <div class="row">
-    <input id="manual" placeholder="Type student ID">
-    <button id="manualBtn">Check in</button>
+    <div id="result"><div class="name">Ready</div><div class="info"></div></div>
+
+    <div class="row">
+      <input id="manual" placeholder="Type student ID">
+      <button id="manualBtn">Check in</button>
+    </div>
+    <button id="undo">Undo last scan</button>
   </div>
-  <button id="undo">Undo last scan</button>
+
+  <div id="dashView" class="hide">
+    <div class="tiles">
+      <div class="tile"><b id="tIn">0</b><span>Checked in</span></div>
+      <div class="tile"><b id="tInside">0</b><span>Inside now</span></div>
+      <div class="tile"><b id="tOut">0</b><span>Checked out</span></div>
+      <div class="tile"><b id="tNot">0</b><span>Not yet arrived</span></div>
+    </div>
+    <input id="search" placeholder="Search name or ID">
+    <div class="chips" id="chips">
+      <button data-f="all" class="on">All</button>
+      <button data-f="inside">Inside</button>
+      <button data-f="out">Out</button>
+      <button data-f="not">Not yet</button>
+    </div>
+    <div id="people"></div>
+  </div>
 
   <div id="status"></div>
   <div style="text-align:center">
@@ -90,6 +137,8 @@ var lastError = '';
 var busy = false;
 var cleared = false;
 var mode = 'IN';
+var view = 'scan';
+var filter = 'all';
 try {
   if (localStorage.getItem('attend_mode') === 'OUT') mode = 'OUT';
 } catch (e) {}
@@ -291,6 +340,134 @@ function showCount() {
   var left = Object.keys(outs).length;
   if (left) text += ' - ' + left + ' out';
   $('count').textContent = text;
+  if (view === 'dash') drawDash();
+}
+
+// ---------- dashboard ----------
+
+function timeText(ms) {
+  if (!ms) return '-';
+  return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+// first time in and first time out for every ID at one event
+function gather(ev) {
+  var rec = {};
+  function add(id, type, ms) {
+    var key = type === 'OUT' ? 'out' : 'in';
+    if (!rec[id]) rec[id] = {};
+    if (rec[id][key] === undefined || ms < rec[id][key]) rec[id][key] = ms;
+  }
+  serverScans.forEach(function (s) {
+    if (s[0] === ev) add(s[1], s[2] || 'IN', Number(s[3]) || 0);
+  });
+  queue.forEach(function (q) {
+    if (q.event === ev) add(q.id, q.type || 'IN', Date.parse(q.time) || 0);
+  });
+  return rec;
+}
+
+function drawDash() {
+  var ev = $('event').value;
+  var box = $('people');
+  box.innerHTML = '';
+  if (!ev) {
+    box.innerHTML = '<div class="empty">Choose an event first</div>';
+    return;
+  }
+
+  var rec = gather(ev);
+  var rows = [];
+  var arrived = 0, inside = 0, out = 0, notYet = 0;
+
+  Object.keys(students).forEach(function (id) {
+    var r = rec[id] || {};
+    var status = r.out !== undefined ? 'out' : (r.in !== undefined ? 'inside' : 'not');
+    if (r.in !== undefined) arrived++;
+    if (status === 'inside') inside++;
+    if (status === 'out') out++;
+    if (status === 'not') notYet++;
+    rows.push({
+      id: id, name: students[id].name,
+      sub: id + ' - Grade ' + students[id].grade + ' - ' + students[id].course,
+      tin: r.in, tout: r.out, status: status,
+      last: Math.max(r.in || 0, r.out || 0)
+    });
+  });
+  Object.keys(rec).forEach(function (id) {
+    if (students[id]) return;
+    var r = rec[id];
+    rows.push({
+      id: id, name: 'GUEST', sub: id + ' - not in student list',
+      tin: r.in, tout: r.out, status: 'guest',
+      last: Math.max(r.in || 0, r.out || 0)
+    });
+  });
+
+  $('tIn').textContent = arrived;
+  $('tInside').textContent = inside;
+  $('tOut').textContent = out;
+  $('tNot').textContent = notYet;
+
+  var q = $('search').value.trim().toLowerCase();
+  rows = rows.filter(function (r) {
+    if (filter !== 'all' && r.status !== filter) return false;
+    return !q || r.name.toLowerCase().indexOf(q) > -1 || r.id.toLowerCase().indexOf(q) > -1;
+  });
+  // latest activity first, people who haven't arrived at the bottom by name
+  rows.sort(function (a, b) {
+    if (a.last !== b.last) return b.last - a.last;
+    return a.name.localeCompare(b.name);
+  });
+
+  if (!rows.length) {
+    box.innerHTML = '<div class="empty">Nobody here</div>';
+    return;
+  }
+  rows.forEach(function (r) {
+    var row = document.createElement('div');
+    row.className = 'person ' + r.status;
+
+    var who = document.createElement('div');
+    var name = document.createElement('div');
+    name.className = 'who';
+    name.textContent = r.name;
+    var sub = document.createElement('div');
+    sub.className = 'sub';
+    sub.textContent = r.sub;
+    who.appendChild(name);
+    who.appendChild(sub);
+
+    var times = document.createElement('div');
+    times.className = 'times';
+    if (r.status === 'not') {
+      times.textContent = 'Not yet';
+    } else {
+      times.appendChild(document.createTextNode('In ' + (r.tin === undefined ? '-' : timeText(r.tin))));
+      times.appendChild(document.createElement('br'));
+      times.appendChild(document.createTextNode('Out ' + (r.tout === undefined ? '-' : timeText(r.tout))));
+    }
+
+    row.appendChild(who);
+    row.appendChild(times);
+    box.appendChild(row);
+  });
+}
+
+function setView(v) {
+  view = v;
+  $('scanView').className = v === 'scan' ? '' : 'hide';
+  $('dashView').className = v === 'dash' ? '' : 'hide';
+  $('tabScan').className = v === 'scan' ? 'on' : '';
+  $('tabDash').className = v === 'dash' ? 'on' : '';
+  // pause the camera while looking at the dashboard
+  if (scanner) {
+    try {
+      if (v === 'dash') scanner.pause(true);
+      else scanner.resume();
+    } catch (e) {}
+  }
+  if (v === 'dash') drawDash();
 }
 
 function showStatus() {
@@ -410,6 +587,21 @@ function setMode(m) {
   try { localStorage.setItem('attend_mode', m); } catch (e) {}
   $('modeIn').className = m === 'IN' ? 'on' : '';
   $('modeOut').className = m === 'OUT' ? 'on' : '';
+}
+
+$('tabScan').onclick = function () { setView('scan'); };
+$('tabDash').onclick = function () { setView('dash'); };
+$('search').oninput = drawDash;
+
+var chipButtons = $('chips').querySelectorAll('button');
+for (var i = 0; i < chipButtons.length; i++) {
+  chipButtons[i].onclick = function () {
+    filter = this.getAttribute('data-f');
+    for (var j = 0; j < chipButtons.length; j++) {
+      chipButtons[j].className = chipButtons[j] === this ? 'on' : '';
+    }
+    drawDash();
+  };
 }
 
 $('modeIn').onclick = function () { setMode('IN'); };
