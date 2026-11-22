@@ -14,10 +14,14 @@
     --line: #e2e8f0; --accent: #4f46e5; --soft: #eceafd;
   }
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme="light"]) {
       --bg: #0f1220; --card: #1a1d2e; --text: #eef0f8; --muted: #9aa3b8;
       --line: #2d3148; --accent: #7c75f5; --soft: #2a2a55;
     }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1220; --card: #1a1d2e; --text: #eef0f8; --muted: #9aa3b8;
+    --line: #2d3148; --accent: #7c75f5; --soft: #2a2a55;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
@@ -35,7 +39,6 @@
   h2 { margin: 0; font-size: 22px; }
   h3 { margin: 18px 0 10px; font-size: 19px; }
   small { color: var(--muted); font-size: 15px; display: block; }
-  #status { font-size: 13px; text-align: center; margin: -2px 0 10px; color: var(--muted); }
 
   /* page headers */
   .top { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 14px; }
@@ -118,14 +121,53 @@
   #nav .ic { padding: 4px 18px; border-radius: 16px; display: flex; }
   #nav button.on { color: var(--text); font-weight: bold; }
   #nav button.on .ic { background: var(--soft); color: var(--accent); }
+
+  /* top bar: current event and sync status */
+  .bar { position: sticky; top: 0; z-index: 3; display: flex; gap: 8px; align-items: center; margin: -6px 0 8px; padding: 6px 0; background: var(--bg); }
+  .pill { flex: 1; min-width: 0; width: auto; min-height: 46px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 14px; border-radius: 999px; }
+  .pill span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pill svg { flex: none; width: 18px; height: 18px; }
+  .pill.none { border-color: #f5a623; box-shadow: 0 0 0 3px rgba(245,166,35,0.25); }
+  .chip { flex: none; width: auto; min-height: 46px; display: flex; align-items: center; gap: 7px; padding: 0 13px; border-radius: 999px; font-size: 13px; font-weight: normal; }
+  .chip span { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip i { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #2e9e4f; }
+  .chip.wait i { background: #f5a623; }
+  .chip.bad i { background: #d63031; }
+  .chip.off i { background: #94a3b8; }
+
+  /* event picker and settings */
+  .opt { display: flex; justify-content: space-between; align-items: center; gap: 10px; text-align: left; margin-bottom: 8px; min-height: 58px; }
+  .opt small { flex: none; }
+  .opt.on { border-color: var(--accent); background: var(--soft); color: var(--accent); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 2px 16px 16px; margin-bottom: 12px; }
+  .card h3 { margin: 14px 0 10px; }
+  .card button { margin-top: 10px; }
+  .card .row button, .card .mode button { margin-top: 0; }
+  #themeBtns button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .danger { color: #d63031; border-color: #d63031; }
+  .help { margin: 0; padding-left: 20px; line-height: 1.6; font-size: 15px; }
+  .help li { margin-bottom: 6px; }
+
+  /* big Scan button in the middle of the bottom bar */
+  #nav button.center .ic, #nav button.center.on .ic { width: 58px; height: 58px; padding: 0; margin-top: -26px; border-radius: 50%; align-items: center; justify-content: center; background: var(--accent); color: #fff; box-shadow: 0 4px 14px rgba(79,70,229,0.45); }
+  #nav button.center svg { width: 28px; height: 28px; }
+  #nav button.center { color: var(--text); font-weight: bold; }
+
+  /* short messages */
+  #toast { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%) translateY(16px); max-width: 90%; padding: 10px 16px; border-radius: 999px; background: #1e1b4b; color: #fff; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity 0.25s, transform 0.25s; z-index: 9; text-align: center; }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 </style>
 </head>
 <body>
 <div class="wrap">
 
-  <div id="eventBar">
-    <select id="event"></select>
-    <div id="status"></div>
+  <select id="event" class="hide"></select>
+  <div id="eventBar" class="bar">
+    <button id="evPill" class="pill none">
+      <span id="evText">Choose event</span>
+      <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+    <button id="syncChip" class="chip ok"><i></i><span id="status">Synced</span></button>
   </div>
 
   <!-- scan -->
@@ -139,6 +181,7 @@
     <div id="reader"></div>
     <button id="start">Start camera</button>
     <div id="result"><div class="name">Ready</div><div class="info"></div></div>
+    <small style="margin: 6px 0">Forgot a card? Type the ID</small>
     <div class="row">
       <input id="manual" placeholder="Type student ID">
       <button id="manualBtn">Check in</button>
@@ -180,10 +223,6 @@
     </div>
     <input id="sSearch" placeholder="Search name or ID">
     <div id="sList"></div>
-    <div class="foot">
-      <button id="reload">Reload student list</button>
-      <button id="clear">Clear data from this phone</button>
-    </div>
   </div>
 
   <!-- reports -->
@@ -215,6 +254,47 @@
       <button id="tabSummary">Student summary</button>
     </div>
     <div id="rList"></div>
+  </div>
+
+  <!-- settings -->
+  <div id="p-settings" class="hide">
+    <div class="top"><h1>Settings</h1></div>
+
+    <div class="card">
+      <h3>Your name</h3>
+      <div class="row">
+        <input id="setName" placeholder="Your name">
+        <button id="setNameBtn">Save</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Appearance</h3>
+      <div class="mode" id="themeBtns">
+        <button data-t="auto">Auto</button>
+        <button data-t="light">Light</button>
+        <button data-t="dark">Dark</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Data on this phone</h3>
+      <div class="sub" id="setInfo" style="white-space: normal"></div>
+      <button id="syncNow">Sync now</button>
+      <button id="reload">Reload student and event list</button>
+      <button id="clear" class="danger">Clear data from this phone</button>
+    </div>
+
+    <div class="card">
+      <h3>How to use</h3>
+      <ol class="help">
+        <li>Tap the event name at the top and choose the event.</li>
+        <li>Choose Time in when students arrive, or Time out when they leave.</li>
+        <li>Scan the QR code on each student's card. Green is a good scan, amber means already scanned, red means the ID is unknown.</li>
+        <li>Forgot a card? Type the ID under the camera.</li>
+        <li>No signal? Keep scanning. Scans are kept on the phone and sent when you are back online.</li>
+      </ol>
+    </div>
   </div>
 
 </div>
@@ -249,18 +329,31 @@
 
 <div id="nav"><div class="inner">
   <button id="n-dash">
-    <span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg></span>Dashboard
-  </button>
-  <button id="n-scan" class="on">
-    <span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v3M14 20h3M20 20v1"/></svg></span>Scan
+    <span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg></span>Home
   </button>
   <button id="n-students">
     <span class="ic"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.2c3 .2 5 2.5 5 5.8"/></svg></span>Students
   </button>
+  <button id="n-scan" class="center on">
+    <span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v3M14 20h3M20 20v1"/></svg></span>Scan
+  </button>
   <button id="n-reports">
     <span class="ic"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg></span>Reports
   </button>
+  <button id="n-settings">
+    <span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/></svg></span>Settings
+  </button>
 </div></div>
+
+<div id="toast"></div>
+
+<!-- choose the event -->
+<div id="evSheet" class="overlay hide">
+  <div class="sheet">
+    <div class="sheethead"><h2>Choose event</h2><button id="evClose">Close</button></div>
+    <div id="evList"></div>
+  </div>
+</div>
 
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyUTV_Tt-BJYOdTKuj-SsvdvKbJB96wK-fHZU0o_oVO-qgVhv8nAG9rOCdDXuUTEkra2Q/exec';
@@ -280,6 +373,9 @@ var sending = [];
 var lastError = '';
 var busy = false;
 var cleared = false;
+var lastSync = 0;
+var evAsked = false;
+var toastTimer = null;
 var mode = 'IN';
 var page = 'scan';
 var dashFilter = 'all';
@@ -338,6 +434,11 @@ function useData(data) {
   fillReportFilters();
   rebuildDone();
   redraw();
+  // first thing to do is pick the event, so ask for it
+  if (!evAsked && !cleared && events.length && !$('event').value && (page === 'scan' || page === 'dash')) {
+    evAsked = true;
+    openEvents();
+  }
 }
 
 function loadAll() {
@@ -349,7 +450,9 @@ function loadAll() {
       return;
     }
     save('attend_cache', data);
+    lastSync = Date.now();
     useData(data);
+    showStatus();
   }).catch(function () {
     if (!events.length) {
       show('', 'No connection', 'Connect once to download the student list');
@@ -369,6 +472,7 @@ function fillEvents() {
     box.appendChild(o);
   });
   box.value = keep;
+  drawEventBar();
 }
 
 function byName(a, b) {
@@ -657,9 +761,22 @@ function showCount() {
 }
 
 function showStatus() {
-  var text = (navigator.onLine ? 'Online' : 'Offline') + ' - ' + queue.length + ' waiting to sync';
-  if (lastError) text += ' - ' + lastError;
+  var waiting = queue.length;
+  var kind = 'ok';
+  var text = lastSync ? 'Synced ' + timeText(lastSync) : 'Synced';
+  if (!navigator.onLine) {
+    kind = 'off';
+    text = 'Offline' + (waiting ? ' - ' + waiting + ' waiting' : '');
+  } else if (lastError) {
+    kind = 'bad';
+    text = lastError === 'will retry' ? 'Sync failed - tap to retry' : 'Problem: ' + lastError;
+  } else if (waiting) {
+    kind = 'wait';
+    text = waiting + ' waiting to sync';
+  }
   $('status').textContent = text;
+  $('syncChip').className = 'chip ' + kind;
+  drawSettings();
 }
 
 // ---------- dashboard ----------
@@ -685,7 +802,7 @@ function drawDash() {
     setChipText('dChips', 'inside', 'Inside');
     setChipText('dChips', 'out', 'Out');
     setChipText('dChips', 'not', 'Not yet');
-    list.appendChild(empty('Choose an event', 'Pick an event at the top of the Scan page.'));
+    list.appendChild(empty('Choose an event', 'Tap the event name at the top to choose one.'));
     return;
   }
 
@@ -985,6 +1102,7 @@ function tick() {
       save('attend_cache', cache);
     }
     lastError = '';
+    lastSync = Date.now();
     rebuildDone();
     redraw();
   }).catch(function (err) {
@@ -1010,11 +1128,115 @@ function send(batch) {
   });
 }
 
+// ---------- friendly bits ----------
+
+function toast(text) {
+  var box = $('toast');
+  box.textContent = text;
+  box.className = 'show';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { box.className = ''; }, 2500);
+}
+
+function applyTheme(t) {
+  var root = document.documentElement;
+  if (t === 'light' || t === 'dark') root.setAttribute('data-theme', t);
+  else root.removeAttribute('data-theme');
+  var buttons = $('themeBtns').querySelectorAll('button');
+  for (var i = 0; i < buttons.length; i++) {
+    buttons[i].className = buttons[i].getAttribute('data-t') === (t || 'auto') ? 'on' : '';
+  }
+}
+
+function drawEventBar() {
+  var ev = $('event').value;
+  $('evText').textContent = ev || 'Choose event';
+  $('evPill').className = 'pill' + (ev ? '' : ' none');
+}
+
+function openEvents() {
+  var list = $('evList');
+  var current = $('event').value;
+  list.innerHTML = '';
+  if (!events.length) {
+    list.appendChild(empty('No events yet', 'Add event names in the Events tab of your Sheet, then tap Reload in Settings.'));
+  }
+  events.forEach(function (name) {
+    var b = document.createElement('button');
+    b.className = 'opt' + (name === current ? ' on' : '');
+    var left = document.createElement('span');
+    left.textContent = name;
+    var right = document.createElement('small');
+    right.textContent = name === current ? 'Selected' : (starts[name] ? 'Starts ' + starts[name] : '');
+    b.appendChild(left);
+    b.appendChild(right);
+    b.onclick = function () {
+      $('event').value = name;
+      $('event').onchange();
+      closeSheets();
+    };
+    list.appendChild(b);
+  });
+  $('evSheet').className = 'overlay';
+}
+
+function drawSettings() {
+  var text = Object.keys(students).length + ' students, ' + events.length + ' events';
+  if (lastSync) text += ' - last synced ' + timeText(lastSync);
+  if (queue.length) text += ' - ' + queue.length + ' waiting to sync';
+  $('setInfo').textContent = text;
+}
+
+function wakeAudio() {
+  try {
+    if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)();
+    if (audio.state === 'suspended') audio.resume();
+  } catch (e) {}
+}
+
+function startCamera(auto) {
+  if (scanner) return;
+  if (typeof Html5Qrcode === 'undefined') {
+    if (!auto) show('bad', 'Scanner not loaded', 'Reload the app while online');
+    return;
+  }
+  wakeAudio();
+  scanner = new Html5Qrcode('reader', {
+    formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
+  });
+  scanner.start(
+    { facingMode: 'environment' },
+    {
+      fps: 10,
+      qrbox: function (w, h) {
+        var size = Math.floor(Math.min(w, h) * 0.7);
+        return { width: size, height: size };
+      }
+    },
+    function (text) { checkIn(text, false); }
+  ).then(function () {
+    $('start').style.display = 'none';
+    try { localStorage.setItem('attend_cam', '1'); } catch (e) {}
+  }).catch(function () {
+    scanner = null;
+    if (!auto) show('bad', 'Camera problem', 'Allow camera access and try again');
+  });
+}
+
+// once the camera has worked on this phone, start it without a tap
+function autoStart() {
+  var ok = false;
+  try { ok = localStorage.getItem('attend_cam') === '1'; } catch (e) {}
+  if (ok) startCamera(true);
+}
+
 // ---------- screens ----------
 
 // draws whichever screen is open
 function redraw() {
   showCount();
+  drawEventBar();
+  if (page === 'settings') drawSettings();
   if (page === 'dash') drawDash();
   if (page === 'students') drawStudents();
   if (page === 'reports') drawReports();
@@ -1022,11 +1244,11 @@ function redraw() {
 
 function go(name) {
   page = name;
-  ['scan', 'dash', 'students', 'reports'].forEach(function (n) {
+  ['scan', 'dash', 'students', 'reports', 'settings'].forEach(function (n) {
     $('p-' + n).className = n === name ? '' : 'hide';
-    $('n-' + n).className = n === name ? 'on' : '';
+    $('n-' + n).className = (n === 'scan' ? 'center ' : '') + (n === name ? 'on' : '');
   });
-  $('eventBar').className = name === 'scan' || name === 'dash' ? '' : 'hide';
+  $('eventBar').className = 'bar' + (name === 'scan' || name === 'dash' ? '' : ' hide');
   // the camera only runs on the Scan screen
   if (scanner) {
     try {
@@ -1034,6 +1256,8 @@ function go(name) {
       else scanner.pause(true);
     } catch (e) {}
   }
+  if (!scanner && name === 'scan') autoStart();
+  if (name === 'settings') $('setName').value = staffName();
   redraw();
   window.scrollTo(0, 0);
 }
@@ -1041,6 +1265,7 @@ function go(name) {
 function closeSheets() {
   $('detail').className = 'overlay hide';
   $('addForm').className = 'overlay hide';
+  $('evSheet').className = 'overlay hide';
 }
 
 function setMode(m) {
@@ -1070,30 +1295,9 @@ $('n-dash').onclick = function () { go('dash'); };
 $('n-scan').onclick = function () { go('scan'); };
 $('n-students').onclick = function () { go('students'); };
 $('n-reports').onclick = function () { go('reports'); };
+$('n-settings').onclick = function () { go('settings'); };
 
-$('start').onclick = function () {
-  if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)();
-  if (scanner) return;
-  scanner = new Html5Qrcode('reader', {
-    formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
-  });
-  scanner.start(
-    { facingMode: 'environment' },
-    {
-      fps: 10,
-      qrbox: function (w, h) {
-        var size = Math.floor(Math.min(w, h) * 0.7);
-        return { width: size, height: size };
-      }
-    },
-    function (text) { checkIn(text, false); }
-  ).then(function () {
-    $('start').style.display = 'none';
-  }).catch(function () {
-    scanner = null;
-    show('bad', 'Camera problem', 'Allow camera access and try again');
-  });
-};
+$('start').onclick = function () { startCamera(false); };
 
 $('manualBtn').onclick = function () {
   checkIn($('manual').value, true);
@@ -1132,12 +1336,31 @@ $('event').onchange = function () {
 $('modeIn').onclick = function () { setMode('IN'); };
 $('modeOut').onclick = function () { setMode('OUT'); };
 
-$('avatar').onclick = function () {
-  var name = prompt('Your name', staffName());
-  if (!name || !name.trim()) return;
-  try { localStorage.setItem('attend_staff', name.trim()); } catch (e) {}
-  drawDash();
+$('avatar').onclick = function () { go('settings'); };
+
+$('evPill').onclick = openEvents;
+$('evClose').onclick = closeSheets;
+$('evSheet').onclick = function (e) { if (e.target === this) closeSheets(); };
+
+$('syncChip').onclick = function () {
+  toast('Syncing...');
+  tick();
 };
+$('syncNow').onclick = $('syncChip').onclick;
+
+$('setNameBtn').onclick = function () {
+  var name = $('setName').value.trim();
+  if (!name) return;
+  try { localStorage.setItem('attend_staff', name); } catch (e) {}
+  drawDash();
+  toast('Name saved');
+};
+
+chipGroup('themeBtns', 'data-t', function (t) {
+  try { localStorage.setItem('attend_theme', t); } catch (e) {}
+  applyTheme(t);
+});
+document.addEventListener('click', wakeAudio);
 
 chipGroup('dChips', 'data-f', function (f) { dashFilter = f; drawDash(); });
 chipGroup('rChips', 'data-r', function (r) { rangeKey = r; drawReports(); });
@@ -1206,6 +1429,7 @@ $('aSave').onclick = function () {
     closeSheets();
     fillReportFilters();
     redraw();
+    toast('Student added');
   }).catch(function (err) {
     $('aMsg').textContent = err.fromServer ? err.message : 'Could not save. Check your connection and try again.';
   });
@@ -1213,6 +1437,7 @@ $('aSave').onclick = function () {
 
 $('reload').onclick = function () {
   cleared = false;
+  toast('Reloading the list...');
   loadAll();
 };
 
@@ -1238,7 +1463,8 @@ $('clear').onclick = function () {
   fillReportFilters();
   redraw();
   showStatus();
-  show('', 'Data cleared', 'Close the app. Tap Reload on the Students screen to download the list again.');
+  show('', 'Data cleared', 'Tap Reload in Settings to download the list again.');
+  toast('Data cleared from this phone');
 };
 
 window.addEventListener('online', function () { showStatus(); tick(); });
@@ -1246,12 +1472,16 @@ window.addEventListener('offline', showStatus);
 
 // ---------- start ----------
 
+var savedTheme = 'auto';
+try { savedTheme = localStorage.getItem('attend_theme') || 'auto'; } catch (e) {}
+applyTheme(savedTheme);
 setMode(mode);
 var cached = load('attend_cache', null);
 if (cached) useData(cached);
 showStatus();
 loadAll();
 setInterval(tick, 10000);
+autoStart();
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js');
