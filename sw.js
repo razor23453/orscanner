@@ -1,4 +1,4 @@
-var CACHE = 'attend-v4';
+var CACHE = 'attend-v5';
 
 self.addEventListener('install', function (e) {
   e.waitUntil(

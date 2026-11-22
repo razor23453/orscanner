@@ -6,88 +6,139 @@
 <title>Event Check-in</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
-<meta name="theme-color" content="#1f6feb">
+<meta name="theme-color" content="#4f46e5">
 <script src="html5-qrcode.min.js"></script>
 <style>
-  :root { --bg: #f2f2f2; --card: #ffffff; --text: #1b1b1b; --line: #c9c9c9; }
+  :root {
+    --bg: #f8fafc; --card: #ffffff; --text: #0f172a; --muted: #64748b;
+    --line: #e2e8f0; --accent: #4f46e5; --soft: #eceafd;
+  }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #121212; --card: #1e1e1e; --text: #eeeeee; --line: #444444; }
+    :root {
+      --bg: #0f1220; --card: #1a1d2e; --text: #eef0f8; --muted: #9aa3b8;
+      --line: #2d3148; --accent: #7c75f5; --soft: #2a2a55;
+    }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, Arial, sans-serif; }
-  .wrap { max-width: 480px; margin: 0 auto; padding: 12px; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+  .wrap { max-width: 480px; margin: 0 auto; padding: 16px 16px 110px; }
+  .hide { display: none !important; }
+  svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
   select, input, button {
-    width: 100%; min-height: 52px; font-size: 18px; padding: 0 12px;
-    border: 1px solid var(--line); border-radius: 8px;
-    background: var(--card); color: var(--text);
+    width: 100%; min-height: 52px; font: inherit; font-size: 17px; padding: 0 14px;
+    border: 1px solid var(--line); border-radius: 14px; background: var(--card); color: var(--text);
   }
   button { font-weight: bold; }
-  #count { font-size: 26px; font-weight: bold; text-align: center; margin: 12px 0; }
-  #reader { width: 100%; background: #000; border-radius: 8px; overflow: hidden; }
-  #start { margin: 10px 0; background: #1f6feb; color: #fff; border: 0; }
-  #result {
-    margin: 10px 0; padding: 16px; min-height: 110px; text-align: center;
-    border-radius: 8px; background: var(--card); border: 1px solid var(--line);
-  }
+  input, select { margin-bottom: 10px; }
+  h1 { margin: 0; font-size: 28px; }
+  h2 { margin: 0; font-size: 22px; }
+  h3 { margin: 18px 0 10px; font-size: 19px; }
+  small { color: var(--muted); font-size: 15px; display: block; }
+  #status { font-size: 13px; text-align: center; margin: -2px 0 10px; color: var(--muted); }
+
+  /* page headers */
+  .top { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .avatar, .addbtn, .icon-btn { width: auto; min-height: 46px; border: 0; border-radius: 14px; background: var(--soft); color: var(--accent); }
+  .avatar { width: 48px; height: 48px; padding: 0; font-size: 20px; }
+  .addbtn { background: var(--accent); color: #fff; padding: 0 20px; }
+  .icon-btn { width: 46px; padding: 0; display: flex; align-items: center; justify-content: center; }
+
+  /* dashboard card */
+  .hero { background: linear-gradient(135deg, #1e1b4b, #312e81); color: #fff; border-radius: 22px; padding: 20px; }
+  .hero small { color: rgba(255,255,255,0.75); }
+  .hero h2 { margin: 4px 0 2px; font-size: 25px; }
+  .hero .evname { opacity: 0.85; font-size: 15px; }
+  .hero .stats { display: flex; gap: 32px; margin-top: 18px; }
+  .hero .stats b { display: block; font-size: 30px; }
+  .hero .stats span { font-size: 13px; opacity: 0.8; }
+
+  /* filter chips and tabs */
+  .chips { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 12px; padding-bottom: 2px; }
+  .chips button { flex: none; width: auto; min-height: 42px; padding: 0 16px; font-size: 15px; border-radius: 999px; white-space: nowrap; }
+  .chips button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .seg { display: flex; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+  .seg button { flex: 1; width: auto; min-height: 48px; border: 0; border-radius: 0; background: none; color: var(--muted); font-size: 16px; border-bottom: 3px solid transparent; }
+  .seg button.on { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* report numbers */
+  .tiles5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 4px 0 14px; }
+  .t5 { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 2px; text-align: center; }
+  .t5 b { display: block; font-size: 20px; }
+  .t5 span { font-size: 11px; color: var(--muted); }
+
+  /* people lists */
+  .person { display: flex; align-items: center; gap: 12px; padding: 12px; margin-bottom: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+  .person .av { flex: none; width: 42px; height: 42px; border-radius: 14px; background: var(--soft); color: var(--accent); display: flex; align-items: center; justify-content: center; font-weight: bold; }
+  .person .mid { flex: 1; min-width: 0; }
+  .who { font-weight: bold; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sub { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .times { text-align: right; font-size: 13px; white-space: nowrap; }
+  .badge { display: inline-block; margin-top: 4px; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: bold; }
+  .b-in { background: #dcfce7; color: #166534; }
+  .b-out { background: #ede9fe; color: #5b21b6; }
+  .b-late { background: #fef3c7; color: #92400e; }
+  .b-no { background: #fee2e2; color: #991b1b; }
+  .b-none { background: #e2e8f0; color: #475569; }
+  .empty { text-align: center; padding: 36px 10px; color: var(--muted); }
+  .empty b { display: block; margin-bottom: 4px; font-size: 18px; color: var(--text); }
+  .more { text-align: center; font-size: 13px; color: var(--muted); padding: 6px; }
+  .foot { text-align: center; margin-top: 16px; }
+  .foot button { width: auto; min-height: 44px; border: 0; background: none; font-size: 14px; font-weight: normal; text-decoration: underline; }
+
+  /* scanner */
+  #count { font-size: 20px; font-weight: bold; margin: 4px 0 10px; }
+  .mode { display: flex; gap: 8px; margin-bottom: 10px; }
+  .mode button { flex: 1; width: auto; }
+  #modeIn.on { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+  #modeOut.on { background: #7b3fe4; border-color: #7b3fe4; color: #fff; }
+  #reader { width: 100%; background: #000; border-radius: 14px; overflow: hidden; }
+  #start { margin: 10px 0; background: var(--accent); color: #fff; border: 0; }
+  #result { margin: 10px 0; padding: 16px; min-height: 110px; text-align: center; border-radius: 14px; background: var(--card); border: 1px solid var(--line); }
   #result .name { font-size: 28px; font-weight: bold; }
   #result .info { font-size: 18px; margin-top: 6px; }
   #result.ok { background: #2e9e4f; border-color: #2e9e4f; color: #fff; }
   #result.dupe { background: #f5a623; border-color: #f5a623; color: #000; }
   #result.bad { background: #d63031; border-color: #d63031; color: #fff; }
   .row { display: flex; gap: 8px; margin-bottom: 10px; }
-  .row input { flex: 1; }
+  .row input { flex: 1; margin-bottom: 0; }
   .row button { width: 120px; }
-  .hide { display: none; }
-  .tabs { display: flex; gap: 8px; margin-top: 10px; }
-  .tabs button { flex: 1; width: auto; }
-  .tabs button.on, .chips button.on { background: #1f6feb; border-color: #1f6feb; color: #fff; }
-  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
-  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px; text-align: center; }
-  .tile b { display: block; font-size: 28px; }
-  .tile span { font-size: 13px; opacity: 0.8; }
-  #search { margin-bottom: 10px; }
-  .chips { display: flex; gap: 6px; margin-bottom: 10px; }
-  .chips button { flex: 1; width: auto; min-height: 44px; padding: 0 6px; font-size: 15px; }
-  .person {
-    display: flex; justify-content: space-between; align-items: center; gap: 8px;
-    padding: 10px 12px; margin-bottom: 6px; background: var(--card);
-    border: 1px solid var(--line); border-left: 6px solid var(--line); border-radius: 8px;
-  }
-  .person.inside { border-left-color: #2e9e4f; }
-  .person.out { border-left-color: #7b3fe4; }
-  .person.guest { border-left-color: #d63031; }
-  .person .who { font-weight: bold; font-size: 17px; }
-  .person .sub { font-size: 13px; opacity: 0.75; }
-  .person .times { text-align: right; font-size: 14px; white-space: nowrap; }
-  .empty { text-align: center; padding: 20px; opacity: 0.7; }
-  .mode { display: flex; gap: 8px; margin-top: 10px; }
-  .mode button { flex: 1; width: auto; }
-  #modeIn.on { background: #1f6feb; border-color: #1f6feb; color: #fff; }
-  #modeOut.on { background: #7b3fe4; border-color: #7b3fe4; color: #fff; }
-  #status { font-size: 14px; text-align: center; margin-top: 12px; opacity: 0.8; }
-  #reload, #clear { width: auto; min-height: 44px; border: 0; background: none; font-size: 14px; font-weight: normal; text-decoration: underline; }
+
+  /* pop-up sheets */
+  .overlay { position: fixed; inset: 0; z-index: 5; background: rgba(0,0,0,0.5); display: flex; align-items: flex-end; justify-content: center; }
+  .sheet { width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; background: var(--bg); border-radius: 22px 22px 0 0; padding: 18px 16px 24px; }
+  .sheethead { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+  .sheethead button { width: auto; min-height: 40px; padding: 0 14px; font-size: 14px; }
+  #aMsg { min-height: 22px; margin-bottom: 8px; font-size: 14px; color: #d63031; }
+
+  /* bottom navigation */
+  #nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 4; background: var(--card); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+  #nav .inner { max-width: 480px; margin: 0 auto; display: flex; }
+  #nav button { flex: 1; width: auto; min-height: 66px; padding: 0; border: 0; border-radius: 0; background: none; font-size: 12px; font-weight: normal; color: var(--muted); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+  #nav .ic { padding: 4px 18px; border-radius: 16px; display: flex; }
+  #nav button.on { color: var(--text); font-weight: bold; }
+  #nav button.on .ic { background: var(--soft); color: var(--accent); }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <select id="event"></select>
-  <div class="tabs">
-    <button id="tabScan" class="on">Scan</button>
-    <button id="tabDash">Dashboard</button>
-  </div>
-  <div id="count">0 / 0 checked in</div>
 
-  <div id="scanView">
+  <div id="eventBar">
+    <select id="event"></select>
+    <div id="status"></div>
+  </div>
+
+  <!-- scan -->
+  <div id="p-scan">
+    <div class="top"><h1>Scan</h1></div>
+    <div id="count">0 / 0 checked in</div>
     <div class="mode">
       <button id="modeIn">Time in</button>
       <button id="modeOut">Time out</button>
     </div>
-
     <div id="reader"></div>
     <button id="start">Start camera</button>
-
     <div id="result"><div class="name">Ready</div><div class="info"></div></div>
-
     <div class="row">
       <input id="manual" placeholder="Type student ID">
       <button id="manualBtn">Check in</button>
@@ -95,37 +146,130 @@
     <button id="undo">Undo last scan</button>
   </div>
 
-  <div id="dashView" class="hide">
-    <div class="tiles">
-      <div class="tile"><b id="tIn">0</b><span>Checked in</span></div>
-      <div class="tile"><b id="tInside">0</b><span>Inside now</span></div>
-      <div class="tile"><b id="tOut">0</b><span>Checked out</span></div>
-      <div class="tile"><b id="tNot">0</b><span>Not yet arrived</span></div>
+  <!-- dashboard -->
+  <div id="p-dash" class="hide">
+    <div class="top">
+      <div><small id="hello">Hello</small><h1 id="staffName">Staff</h1></div>
+      <button id="avatar" class="avatar">S</button>
     </div>
-    <input id="search" placeholder="Search name or ID">
-    <div class="chips" id="chips">
+    <div class="hero">
+      <small id="heroDay"></small>
+      <h2 id="heroDate"></h2>
+      <div class="evname" id="heroEvent"></div>
+      <div class="stats">
+        <div><b id="hTotal">0</b><span>Total students</span></div>
+        <div><b id="hIn">0</b><span>Present</span></div>
+      </div>
+    </div>
+    <h3>Event attendance</h3>
+    <input id="dSearch" placeholder="Search name or ID">
+    <div class="chips" id="dChips">
       <button data-f="all" class="on">All</button>
       <button data-f="inside">Inside</button>
       <button data-f="out">Out</button>
       <button data-f="not">Not yet</button>
     </div>
-    <div id="people"></div>
+    <div id="dList"></div>
   </div>
 
-  <div id="status"></div>
-  <div style="text-align:center">
-    <button id="reload">Reload student list</button>
-    <button id="clear">Clear data from this phone</button>
+  <!-- students -->
+  <div id="p-students" class="hide">
+    <div class="top">
+      <div><h1>Students</h1><small id="sCount"></small></div>
+      <button id="addBtn" class="addbtn">+ Add</button>
+    </div>
+    <input id="sSearch" placeholder="Search name or ID">
+    <div id="sList"></div>
+    <div class="foot">
+      <button id="reload">Reload student list</button>
+      <button id="clear">Clear data from this phone</button>
+    </div>
+  </div>
+
+  <!-- reports -->
+  <div id="p-reports" class="hide">
+    <div class="top">
+      <div><h1>Attendance</h1><small id="rRange"></small></div>
+      <button id="export" class="icon-btn" title="Download CSV">
+        <svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 20h14"/></svg>
+      </button>
+    </div>
+    <div class="chips" id="rChips">
+      <button data-r="today">Today</button>
+      <button data-r="week">This week</button>
+      <button data-r="month">This month</button>
+      <button data-r="last">Last month</button>
+      <button data-r="all" class="on">All</button>
+    </div>
+    <select id="rEvent"></select>
+    <select id="rStudent"></select>
+    <div class="tiles5">
+      <div class="t5"><b id="rPresent" style="color:#16a34a">0</b><span>Present</span></div>
+      <div class="t5"><b id="rLate" style="color:#d97706">0</b><span>Late</span></div>
+      <div class="t5"><b id="rNoOut" style="color:#7c3aed">0</b><span>No out</span></div>
+      <div class="t5"><b id="rAbsent" style="color:#dc2626">0</b><span>Absent</span></div>
+      <div class="t5"><b id="rAvg" style="color:#4f46e5">0.0h</b><span>Avg hrs</span></div>
+    </div>
+    <div class="seg">
+      <button id="tabDaily" class="on">Daily records</button>
+      <button id="tabSummary">Student summary</button>
+    </div>
+    <div id="rList"></div>
+  </div>
+
+</div>
+
+<!-- one student's history -->
+<div id="detail" class="overlay hide">
+  <div class="sheet">
+    <div class="sheethead">
+      <div><h2 id="dName"></h2><div class="sub" id="dSub"></div></div>
+      <button id="dClose">Close</button>
+    </div>
+    <div class="sub" id="dSum" style="margin-bottom:10px"></div>
+    <div id="dHist"></div>
   </div>
 </div>
+
+<!-- add a student -->
+<div id="addForm" class="overlay hide">
+  <div class="sheet">
+    <div class="sheethead"><h2>Add student</h2></div>
+    <input id="aId" placeholder="Student ID">
+    <input id="aName" placeholder="Full name">
+    <input id="aYear" placeholder="Year level (for example 1)">
+    <input id="aCourse" placeholder="Course (for example BSIT)">
+    <div id="aMsg"></div>
+    <div class="row">
+      <button id="aSave" style="background:var(--accent);color:#fff;border:0">Save</button>
+      <button id="aCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="nav"><div class="inner">
+  <button id="n-dash">
+    <span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg></span>Dashboard
+  </button>
+  <button id="n-scan" class="on">
+    <span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v3M14 20h3M20 20v1"/></svg></span>Scan
+  </button>
+  <button id="n-students">
+    <span class="ic"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.2c3 .2 5 2.5 5 5.8"/></svg></span>Students
+  </button>
+  <button id="n-reports">
+    <span class="ic"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg></span>Reports
+  </button>
+</div></div>
 
 <script>
 var API_URL = 'https://script.google.com/macros/s/AKfycbyUTV_Tt-BJYOdTKuj-SsvdvKbJB96wK-fHZU0o_oVO-qgVhv8nAG9rOCdDXuUTEkra2Q/exec';
 var KEY = 'ra3r4n-wr1mzb-nerisy-g7p6zh';
+var GRACE = 0; // minutes after an event's start time before a student counts as late
 
 var students = {};
-var studentCount = 0;
 var events = [];
+var starts = {};
 var serverScans = [];
 var queue = load('attend_queue', []);
 var done = {};
@@ -137,13 +281,17 @@ var lastError = '';
 var busy = false;
 var cleared = false;
 var mode = 'IN';
-var view = 'scan';
-var filter = 'all';
+var page = 'scan';
+var dashFilter = 'all';
+var rangeKey = 'all';
+var reportTab = 'daily';
+var lastReport = { rows: [], sums: [] };
+var scanner = null;
+var audio = null;
+
 try {
   if (localStorage.getItem('attend_mode') === 'OUT') mode = 'OUT';
 } catch (e) {}
-var scanner = null;
-var audio = null;
 
 function $(id) { return document.getElementById(id); }
 
@@ -183,12 +331,13 @@ function useData(data) {
   data.students.forEach(function (r) {
     students[r[0]] = { name: r[1], grade: r[2], course: r[3] };
   });
-  studentCount = data.students.length;
   events = data.events;
+  starts = data.starts || {};
   serverScans = data.scans;
   fillEvents();
+  fillReportFilters();
   rebuildDone();
-  showCount();
+  redraw();
 }
 
 function loadAll() {
@@ -222,6 +371,36 @@ function fillEvents() {
   box.value = keep;
 }
 
+function byName(a, b) {
+  return students[a].name.localeCompare(students[b].name);
+}
+
+function fillReportFilters() {
+  var ev = $('rEvent');
+  var keepEvent = ev.value;
+  ev.innerHTML = '<option value="">All events</option>';
+  events.forEach(function (name) {
+    var o = document.createElement('option');
+    o.value = name;
+    o.textContent = name;
+    ev.appendChild(o);
+  });
+  ev.value = keepEvent;
+  if (ev.selectedIndex < 0) ev.selectedIndex = 0;
+
+  var st = $('rStudent');
+  var keepStudent = st.value;
+  st.innerHTML = '<option value="">All students</option>';
+  Object.keys(students).sort(byName).forEach(function (id) {
+    var o = document.createElement('option');
+    o.value = id;
+    o.textContent = students[id].name + ' (' + id + ')';
+    st.appendChild(o);
+  });
+  st.value = keepStudent;
+  if (st.selectedIndex < 0) st.selectedIndex = 0;
+}
+
 function mark(ev, id, type) {
   var key = ev + '|' + type;
   if (!done[key]) done[key] = {};
@@ -237,6 +416,141 @@ function rebuildDone() {
   done = {};
   serverScans.forEach(function (s) { mark(s[0], s[1], s[2] || 'IN'); });
   queue.forEach(function (s) { mark(s.event, s.id, s.type || 'IN'); });
+}
+
+// one record per event + student with the first time in and first time out
+function buildRecords() {
+  var recs = {};
+  function add(ev, id, type, ms) {
+    var key = ev + '|' + id;
+    if (!recs[key]) recs[key] = { event: ev, id: id };
+    var field = type === 'OUT' ? 'tout' : 'tin';
+    if (recs[key][field] === undefined || ms < recs[key][field]) recs[key][field] = ms;
+  }
+  serverScans.forEach(function (s) { add(s[0], s[1], s[2] || 'IN', Number(s[3]) || 0); });
+  queue.forEach(function (q) { add(q.event, q.id, q.type || 'IN', Date.parse(q.time) || 0); });
+  return recs;
+}
+
+function firstTime(r) {
+  var a = r.tin === undefined ? Infinity : r.tin;
+  var b = r.tout === undefined ? Infinity : r.tout;
+  return Math.min(a, b);
+}
+
+// events that have at least one scan, in the order of the Events tab
+function heldEvents(recs) {
+  var seen = {};
+  Object.keys(recs).forEach(function (k) { seen[recs[k].event] = true; });
+  return events.filter(function (name) { return seen[name]; });
+}
+
+// reads a start time typed in the Events tab, like 8:00 AM or 08:00
+function startMinutes(ev) {
+  var m = /(\d{1,2}):(\d{2})(?::\d{2})?\s*([ap]m)?/i.exec(starts[ev] || '');
+  if (!m) return null;
+  var h = Number(m[1]);
+  if (m[3]) {
+    h = h % 12;
+    if (m[3].toLowerCase() === 'pm') h += 12;
+  }
+  return h * 60 + Number(m[2]);
+}
+
+function isLate(r) {
+  var start = startMinutes(r.event);
+  if (start === null || !r.tin) return false;
+  var d = new Date(r.tin);
+  return d.getHours() * 60 + d.getMinutes() > start + GRACE;
+}
+
+// ---------- small helpers ----------
+
+function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+function timeText(ms) {
+  if (!ms) return '-';
+  return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function dayText(ms) {
+  if (!ms) return '';
+  return new Date(ms).toLocaleDateString([], { day: 'numeric', month: 'short' });
+}
+
+function hoursText(ms) {
+  return (ms / 3600000).toFixed(1) + 'h';
+}
+
+function initials(name) {
+  var words = String(name).trim().split(/\s+/);
+  var text = words[0].charAt(0);
+  if (words.length > 1) text += words[1].charAt(0);
+  return text.toUpperCase();
+}
+
+function staffName() {
+  try {
+    return localStorage.getItem('attend_staff') || 'Staff';
+  } catch (e) {
+    return 'Staff';
+  }
+}
+
+function empty(title, text) {
+  var box = document.createElement('div');
+  box.className = 'empty';
+  var b = document.createElement('b');
+  b.textContent = title;
+  box.appendChild(b);
+  box.appendChild(document.createTextNode(text));
+  return box;
+}
+
+// one row in a list: initials, name, small line, and text on the right
+function personRow(name, sub, badge, badgeClass, lines, tap) {
+  var row = document.createElement('div');
+  row.className = 'person';
+
+  var av = document.createElement('div');
+  av.className = 'av';
+  av.textContent = initials(name);
+
+  var mid = document.createElement('div');
+  mid.className = 'mid';
+  var who = document.createElement('div');
+  who.className = 'who';
+  who.textContent = name;
+  var small = document.createElement('div');
+  small.className = 'sub';
+  small.textContent = sub;
+  mid.appendChild(who);
+  mid.appendChild(small);
+
+  var right = document.createElement('div');
+  right.className = 'times';
+  lines.forEach(function (t) {
+    var d = document.createElement('div');
+    d.textContent = t;
+    right.appendChild(d);
+  });
+  if (badge) {
+    var b = document.createElement('span');
+    b.className = 'badge ' + badgeClass;
+    b.textContent = badge;
+    right.appendChild(b);
+  }
+
+  row.appendChild(av);
+  row.appendChild(mid);
+  row.appendChild(right);
+  if (tap) row.onclick = tap;
+  return row;
+}
+
+function studentSub(id) {
+  var s = students[id];
+  return id + ' - Year ' + s.grade + ' - ' + s.course;
 }
 
 // ---------- scanning ----------
@@ -279,10 +593,10 @@ function checkIn(text, manual) {
   save('attend_queue', queue);
   lastUid = item.uid;
   mark(ev, id, mode);
-  showCount();
+  redraw();
   showStatus();
 
-  var info = s ? 'Grade ' + s.grade + ' - ' + s.course : '';
+  var info = s ? 'Year ' + s.grade + ' - ' + s.course : '';
   if (!s) {
     show('bad', 'Unknown ID', id + ' saved as GUEST');
   } else if (noIn) {
@@ -335,145 +649,320 @@ function showCount() {
     if (students[id]) n++;
     else guests++;
   }
-  var text = n + ' / ' + studentCount + ' checked in';
+  var text = n + ' / ' + Object.keys(students).length + ' checked in';
   if (guests) text += ' (+' + guests + ' guest' + (guests > 1 ? 's' : '') + ')';
   var left = Object.keys(outs).length;
   if (left) text += ' - ' + left + ' out';
   $('count').textContent = text;
-  if (view === 'dash') drawDash();
-}
-
-// ---------- dashboard ----------
-
-function timeText(ms) {
-  if (!ms) return '-';
-  return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-// first time in and first time out for every ID at one event
-function gather(ev) {
-  var rec = {};
-  function add(id, type, ms) {
-    var key = type === 'OUT' ? 'out' : 'in';
-    if (!rec[id]) rec[id] = {};
-    if (rec[id][key] === undefined || ms < rec[id][key]) rec[id][key] = ms;
-  }
-  serverScans.forEach(function (s) {
-    if (s[0] === ev) add(s[1], s[2] || 'IN', Number(s[3]) || 0);
-  });
-  queue.forEach(function (q) {
-    if (q.event === ev) add(q.id, q.type || 'IN', Date.parse(q.time) || 0);
-  });
-  return rec;
-}
-
-function drawDash() {
-  var ev = $('event').value;
-  var box = $('people');
-  box.innerHTML = '';
-  if (!ev) {
-    box.innerHTML = '<div class="empty">Choose an event first</div>';
-    return;
-  }
-
-  var rec = gather(ev);
-  var rows = [];
-  var arrived = 0, inside = 0, out = 0, notYet = 0;
-
-  Object.keys(students).forEach(function (id) {
-    var r = rec[id] || {};
-    var status = r.out !== undefined ? 'out' : (r.in !== undefined ? 'inside' : 'not');
-    if (r.in !== undefined) arrived++;
-    if (status === 'inside') inside++;
-    if (status === 'out') out++;
-    if (status === 'not') notYet++;
-    rows.push({
-      id: id, name: students[id].name,
-      sub: id + ' - Grade ' + students[id].grade + ' - ' + students[id].course,
-      tin: r.in, tout: r.out, status: status,
-      last: Math.max(r.in || 0, r.out || 0)
-    });
-  });
-  Object.keys(rec).forEach(function (id) {
-    if (students[id]) return;
-    var r = rec[id];
-    rows.push({
-      id: id, name: 'GUEST', sub: id + ' - not in student list',
-      tin: r.in, tout: r.out, status: 'guest',
-      last: Math.max(r.in || 0, r.out || 0)
-    });
-  });
-
-  $('tIn').textContent = arrived;
-  $('tInside').textContent = inside;
-  $('tOut').textContent = out;
-  $('tNot').textContent = notYet;
-
-  var q = $('search').value.trim().toLowerCase();
-  rows = rows.filter(function (r) {
-    if (filter !== 'all' && r.status !== filter) return false;
-    return !q || r.name.toLowerCase().indexOf(q) > -1 || r.id.toLowerCase().indexOf(q) > -1;
-  });
-  // latest activity first, people who haven't arrived at the bottom by name
-  rows.sort(function (a, b) {
-    if (a.last !== b.last) return b.last - a.last;
-    return a.name.localeCompare(b.name);
-  });
-
-  if (!rows.length) {
-    box.innerHTML = '<div class="empty">Nobody here</div>';
-    return;
-  }
-  rows.forEach(function (r) {
-    var row = document.createElement('div');
-    row.className = 'person ' + r.status;
-
-    var who = document.createElement('div');
-    var name = document.createElement('div');
-    name.className = 'who';
-    name.textContent = r.name;
-    var sub = document.createElement('div');
-    sub.className = 'sub';
-    sub.textContent = r.sub;
-    who.appendChild(name);
-    who.appendChild(sub);
-
-    var times = document.createElement('div');
-    times.className = 'times';
-    if (r.status === 'not') {
-      times.textContent = 'Not yet';
-    } else {
-      times.appendChild(document.createTextNode('In ' + (r.tin === undefined ? '-' : timeText(r.tin))));
-      times.appendChild(document.createElement('br'));
-      times.appendChild(document.createTextNode('Out ' + (r.tout === undefined ? '-' : timeText(r.tout))));
-    }
-
-    row.appendChild(who);
-    row.appendChild(times);
-    box.appendChild(row);
-  });
-}
-
-function setView(v) {
-  view = v;
-  $('scanView').className = v === 'scan' ? '' : 'hide';
-  $('dashView').className = v === 'dash' ? '' : 'hide';
-  $('tabScan').className = v === 'scan' ? 'on' : '';
-  $('tabDash').className = v === 'dash' ? 'on' : '';
-  // pause the camera while looking at the dashboard
-  if (scanner) {
-    try {
-      if (v === 'dash') scanner.pause(true);
-      else scanner.resume();
-    } catch (e) {}
-  }
-  if (v === 'dash') drawDash();
 }
 
 function showStatus() {
   var text = (navigator.onLine ? 'Online' : 'Offline') + ' - ' + queue.length + ' waiting to sync';
   if (lastError) text += ' - ' + lastError;
   $('status').textContent = text;
+}
+
+// ---------- dashboard ----------
+
+function drawDash() {
+  var ev = $('event').value;
+  var now = new Date();
+  var hour = now.getHours();
+  $('hello').textContent = hour < 12 ? 'Good Morning' : (hour < 18 ? 'Good Afternoon' : 'Good Evening');
+  $('staffName').textContent = staffName();
+  $('avatar').textContent = initials(staffName());
+  $('heroDay').textContent = now.toLocaleDateString([], { weekday: 'long' });
+  $('heroDate').textContent = now.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
+  $('heroEvent').textContent = ev || 'No event chosen';
+
+  var ids = Object.keys(students);
+  var list = $('dList');
+  list.innerHTML = '';
+  $('hTotal').textContent = ids.length;
+
+  if (!ev) {
+    $('hIn').textContent = 0;
+    setChipText('dChips', 'inside', 'Inside');
+    setChipText('dChips', 'out', 'Out');
+    setChipText('dChips', 'not', 'Not yet');
+    list.appendChild(empty('Choose an event', 'Pick an event at the top of the Scan page.'));
+    return;
+  }
+
+  var recs = buildRecords();
+  var rows = [];
+  var present = 0, inside = 0, out = 0, notYet = 0;
+
+  ids.forEach(function (id) {
+    var r = recs[ev + '|' + id] || {};
+    var status = r.tout !== undefined ? 'out' : (r.tin !== undefined ? 'inside' : 'not');
+    if (r.tin !== undefined) present++;
+    if (status === 'inside') inside++;
+    if (status === 'out') out++;
+    if (status === 'not') notYet++;
+    rows.push({ id: id, name: students[id].name, sub: studentSub(id), status: status, tin: r.tin, tout: r.tout, last: Math.max(r.tin || 0, r.tout || 0) });
+  });
+  Object.keys(recs).forEach(function (k) {
+    var r = recs[k];
+    if (r.event !== ev || students[r.id]) return;
+    rows.push({ id: r.id, name: 'GUEST', sub: r.id + ' - not in student list', status: 'guest', tin: r.tin, tout: r.tout, last: Math.max(r.tin || 0, r.tout || 0) });
+  });
+
+  $('hIn').textContent = present;
+  setChipText('dChips', 'inside', 'Inside ' + inside);
+  setChipText('dChips', 'out', 'Out ' + out);
+  setChipText('dChips', 'not', 'Not yet ' + notYet);
+
+  var q = $('dSearch').value.trim().toLowerCase();
+  rows = rows.filter(function (r) {
+    if (dashFilter !== 'all' && r.status !== dashFilter) return false;
+    return !q || r.name.toLowerCase().indexOf(q) > -1 || r.id.toLowerCase().indexOf(q) > -1;
+  });
+  // latest activity first, then people who haven't arrived by name
+  rows.sort(function (a, b) {
+    if (a.last !== b.last) return b.last - a.last;
+    return a.name.localeCompare(b.name);
+  });
+
+  if (!rows.length) {
+    list.appendChild(empty('Nobody here', 'Nothing matches this filter yet.'));
+    return;
+  }
+  var labels = {
+    inside: ['Inside', 'b-in'],
+    out: ['Out', 'b-out'],
+    not: ['Not yet', 'b-none'],
+    guest: ['Guest', 'b-no']
+  };
+  rows.forEach(function (r) {
+    var lines = r.status === 'not' ? [] : ['In ' + (r.tin === undefined ? '-' : timeText(r.tin)), 'Out ' + (r.tout === undefined ? '-' : timeText(r.tout))];
+    var tap = students[r.id] ? function () { openDetail(r.id); } : null;
+    list.appendChild(personRow(r.name, r.sub, labels[r.status][0], labels[r.status][1], lines, tap));
+  });
+}
+
+function setChipText(boxId, value, text) {
+  var b = $(boxId).querySelector('[data-f="' + value + '"]');
+  if (b) b.textContent = text;
+}
+
+// ---------- students ----------
+
+function drawStudents() {
+  var recs = buildRecords();
+  var held = heldEvents(recs);
+  var q = $('sSearch').value.trim().toLowerCase();
+  var ids = Object.keys(students).sort(byName).filter(function (id) {
+    return !q || students[id].name.toLowerCase().indexOf(q) > -1 || id.toLowerCase().indexOf(q) > -1;
+  });
+  $('sCount').textContent = ids.length + ' student' + (ids.length === 1 ? '' : 's');
+
+  var list = $('sList');
+  list.innerHTML = '';
+  if (!ids.length) {
+    list.appendChild(empty('No students found', Object.keys(students).length ? 'Try a different search.' : 'Add students in the Sheet, then tap Reload.'));
+    return;
+  }
+  ids.forEach(function (id) {
+    var attended = held.filter(function (ev) {
+      var r = recs[ev + '|' + id];
+      return r && r.tin !== undefined;
+    }).length;
+    var lines = held.length ? [attended + ' / ' + held.length, 'events'] : [];
+    list.appendChild(personRow(students[id].name, studentSub(id), null, '', lines, function () { openDetail(id); }));
+  });
+}
+
+function openDetail(id) {
+  var s = students[id];
+  var recs = buildRecords();
+  var held = heldEvents(recs);
+  $('dName').textContent = s.name;
+  $('dSub').textContent = studentSub(id);
+
+  var attended = 0;
+  var box = $('dHist');
+  box.innerHTML = '';
+  held.forEach(function (ev) {
+    var r = recs[ev + '|' + id];
+    var badge = ['Absent', 'b-no'];
+    var lines = [];
+    var sub = 'No scan';
+    if (r && r.tin !== undefined) {
+      attended++;
+      badge = isLate(r) ? ['Late', 'b-late'] : (r.tout === undefined ? ['No time out', 'b-out'] : ['Present', 'b-in']);
+    }
+    if (r) {
+      sub = dayText(firstTime(r));
+      lines = ['In ' + (r.tin === undefined ? '-' : timeText(r.tin)), 'Out ' + (r.tout === undefined ? '-' : timeText(r.tout))];
+    }
+    box.appendChild(personRow(ev, sub, badge[0], badge[1], lines, null));
+  });
+  if (!held.length) box.appendChild(empty('No events yet', 'Nothing has been scanned.'));
+  $('dSum').textContent = held.length ? 'Attended ' + attended + ' of ' + held.length + ' events' : '';
+  $('detail').className = 'overlay';
+}
+
+// ---------- reports ----------
+
+// start and end (in milliseconds) of the chosen date range, or null for all dates
+function rangeFor(key) {
+  var d = new Date();
+  var y = d.getFullYear();
+  var m = d.getMonth();
+  var day = d.getDate();
+  var weekday = (d.getDay() + 6) % 7; // Monday is the first day of the week
+  if (key === 'today') return [new Date(y, m, day).getTime(), new Date(y, m, day + 1).getTime()];
+  if (key === 'week') return [new Date(y, m, day - weekday).getTime(), new Date(y, m, day - weekday + 7).getTime()];
+  if (key === 'month') return [new Date(y, m, 1).getTime(), new Date(y, m + 1, 1).getTime()];
+  if (key === 'last') return [new Date(y, m - 1, 1).getTime(), new Date(y, m, 1).getTime()];
+  return null;
+}
+
+function drawReports() {
+  var range = rangeFor(rangeKey);
+  $('rRange').textContent = range ? dayText(range[0]) + ' - ' + dayText(range[1] - 1) : 'All dates';
+
+  var evFilter = $('rEvent').value;
+  var stFilter = $('rStudent').value;
+  var recs = buildRecords();
+
+  // records inside the date range
+  var inRange = [];
+  Object.keys(recs).forEach(function (k) {
+    var r = recs[k];
+    var t = firstTime(r);
+    if (range && (t < range[0] || t >= range[1])) return;
+    if (evFilter && r.event !== evFilter) return;
+    inRange.push(r);
+  });
+
+  // events that took place in this range
+  var held = {};
+  inRange.forEach(function (r) { held[r.event] = true; });
+  var heldList = Object.keys(held);
+
+  // one summary per student
+  var ids = stFilter ? [stFilter] : Object.keys(students).sort(byName);
+  var sums = ids.map(function (id) {
+    var s = { id: id, present: 0, late: 0, noOut: 0, absent: 0, ms: 0, timed: 0 };
+    heldList.forEach(function (ev) {
+      var r = recs[ev + '|' + id];
+      if (!r || r.tin === undefined) {
+        s.absent++;
+        return;
+      }
+      s.present++;
+      if (isLate(r)) s.late++;
+      if (r.tout === undefined) {
+        s.noOut++;
+      } else {
+        s.ms += r.tout - r.tin;
+        s.timed++;
+      }
+    });
+    return s;
+  });
+
+  var total = { present: 0, late: 0, noOut: 0, absent: 0, ms: 0, timed: 0 };
+  sums.forEach(function (s) {
+    for (var k in total) total[k] += s[k];
+  });
+  $('rPresent').textContent = total.present;
+  $('rLate').textContent = total.late;
+  $('rNoOut').textContent = total.noOut;
+  $('rAbsent').textContent = total.absent;
+  $('rAvg').textContent = total.timed ? hoursText(total.ms / total.timed) : '0.0h';
+
+  var rows = inRange.filter(function (r) {
+    return students[r.id] && (!stFilter || r.id === stFilter);
+  });
+  rows.sort(function (a, b) { return firstTime(b) - firstTime(a); });
+  lastReport = { rows: rows, sums: sums };
+
+  var list = $('rList');
+  list.innerHTML = '';
+
+  if (reportTab === 'daily') {
+    if (!rows.length) {
+      list.appendChild(empty('No records found', 'Try changing the date range or filters.'));
+      return;
+    }
+    rows.slice(0, 300).forEach(function (r) {
+      var badge = ['Present', 'b-in'];
+      if (r.tin === undefined) badge = ['No time in', 'b-no'];
+      else if (isLate(r)) badge = ['Late', 'b-late'];
+      else if (r.tout === undefined) badge = ['No time out', 'b-out'];
+      var lines = ['In ' + (r.tin === undefined ? '-' : timeText(r.tin)), 'Out ' + (r.tout === undefined ? '-' : timeText(r.tout))];
+      if (r.tin !== undefined && r.tout !== undefined) lines.push(hoursText(r.tout - r.tin));
+      list.appendChild(personRow(students[r.id].name, r.event + ' - ' + dayText(firstTime(r)), badge[0], badge[1], lines, function () { openDetail(r.id); }));
+    });
+    if (rows.length > 300) {
+      var more = document.createElement('div');
+      more.className = 'more';
+      more.textContent = 'Showing the latest 300 of ' + rows.length + '. Download the CSV for all of them.';
+      list.appendChild(more);
+    }
+  } else {
+    if (!sums.length) {
+      list.appendChild(empty('No students', 'Add students in the Sheet first.'));
+      return;
+    }
+    sums.forEach(function (s) {
+      var lines = ['Present ' + s.present + ' - Absent ' + s.absent];
+      if (s.timed) lines.push('Avg ' + hoursText(s.ms / s.timed));
+      list.appendChild(personRow(students[s.id].name, studentSub(s.id), null, '', lines, function () { openDetail(s.id); }));
+    });
+  }
+}
+
+function csvCell(v) {
+  v = v === undefined || v === null ? '' : String(v);
+  // stop Excel from running text that starts like a formula
+  if (/^[=+\-@\t\r]/.test(v)) v = "'" + v;
+  return '"' + v.replace(/"/g, '""') + '"';
+}
+
+function clock(ms) {
+  if (ms === undefined || !ms) return '';
+  var d = new Date(ms);
+  return pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+
+function dateKey(ms) {
+  if (!ms) return '';
+  var d = new Date(ms);
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+
+function downloadCsv() {
+  var rows = [];
+  var name = 'attendance-daily.csv';
+  if (reportTab === 'daily') {
+    rows.push(['Date', 'Event', 'ID', 'Name', 'Year', 'Course', 'Time in', 'Time out', 'Hours', 'Status']);
+    lastReport.rows.forEach(function (r) {
+      var s = students[r.id];
+      var status = r.tin === undefined ? 'No time in' : (isLate(r) ? 'Late' : (r.tout === undefined ? 'No time out' : 'Present'));
+      var hours = r.tin !== undefined && r.tout !== undefined ? ((r.tout - r.tin) / 3600000).toFixed(2) : '';
+      rows.push([dateKey(firstTime(r)), r.event, r.id, s.name, s.grade, s.course, clock(r.tin), clock(r.tout), hours, status]);
+    });
+  } else {
+    name = 'attendance-summary.csv';
+    rows.push(['ID', 'Name', 'Year', 'Course', 'Present', 'Late', 'No time out', 'Absent', 'Average hours']);
+    lastReport.sums.forEach(function (s) {
+      var st = students[s.id];
+      rows.push([s.id, st.name, st.grade, st.course, s.present, s.late, s.noOut, s.absent, s.timed ? (s.ms / s.timed / 3600000).toFixed(2) : '']);
+    });
+  }
+  var text = rows.map(function (r) { return r.map(csvCell).join(','); }).join('\r\n');
+  var blob = new Blob(['\ufeff' + text], { type: 'text/csv' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
 }
 
 // ---------- syncing ----------
@@ -497,7 +986,7 @@ function tick() {
     }
     lastError = '';
     rebuildDone();
-    showCount();
+    redraw();
   }).catch(function (err) {
     lastError = err.message === 'bad key' ? 'wrong secret key' : 'will retry';
   }).then(function () {
@@ -521,7 +1010,66 @@ function send(batch) {
   });
 }
 
+// ---------- screens ----------
+
+// draws whichever screen is open
+function redraw() {
+  showCount();
+  if (page === 'dash') drawDash();
+  if (page === 'students') drawStudents();
+  if (page === 'reports') drawReports();
+}
+
+function go(name) {
+  page = name;
+  ['scan', 'dash', 'students', 'reports'].forEach(function (n) {
+    $('p-' + n).className = n === name ? '' : 'hide';
+    $('n-' + n).className = n === name ? 'on' : '';
+  });
+  $('eventBar').className = name === 'scan' || name === 'dash' ? '' : 'hide';
+  // the camera only runs on the Scan screen
+  if (scanner) {
+    try {
+      if (name === 'scan') scanner.resume();
+      else scanner.pause(true);
+    } catch (e) {}
+  }
+  redraw();
+  window.scrollTo(0, 0);
+}
+
+function closeSheets() {
+  $('detail').className = 'overlay hide';
+  $('addForm').className = 'overlay hide';
+}
+
+function setMode(m) {
+  mode = m;
+  lastId = '';
+  try { localStorage.setItem('attend_mode', m); } catch (e) {}
+  $('modeIn').className = m === 'IN' ? 'on' : '';
+  $('modeOut').className = m === 'OUT' ? 'on' : '';
+}
+
+// makes a row of buttons act like a radio group
+function chipGroup(boxId, attr, onPick) {
+  var buttons = $(boxId).querySelectorAll('button');
+  for (var i = 0; i < buttons.length; i++) {
+    buttons[i].onclick = function () {
+      for (var j = 0; j < buttons.length; j++) {
+        buttons[j].className = buttons[j] === this ? 'on' : '';
+      }
+      onPick(this.getAttribute(attr));
+    };
+  }
+}
+
 // ---------- buttons ----------
+
+$('n-dash').onclick = function () { go('dash'); };
+$('n-scan').onclick = function () { go('scan'); };
+$('n-students').onclick = function () { go('students'); };
+$('n-reports').onclick = function () { go('reports'); };
 
 $('start').onclick = function () {
   if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)();
@@ -571,41 +1119,97 @@ $('undo').onclick = function () {
   lastUid = null;
   lastId = '';
   rebuildDone();
-  showCount();
+  redraw();
   showStatus();
   show('', 'Scan removed', '');
 };
 
 $('event').onchange = function () {
-  localStorage.setItem('attend_event', this.value);
-  showCount();
+  try { localStorage.setItem('attend_event', this.value); } catch (e) {}
+  redraw();
 };
-
-function setMode(m) {
-  mode = m;
-  lastId = '';
-  try { localStorage.setItem('attend_mode', m); } catch (e) {}
-  $('modeIn').className = m === 'IN' ? 'on' : '';
-  $('modeOut').className = m === 'OUT' ? 'on' : '';
-}
-
-$('tabScan').onclick = function () { setView('scan'); };
-$('tabDash').onclick = function () { setView('dash'); };
-$('search').oninput = drawDash;
-
-var chipButtons = $('chips').querySelectorAll('button');
-for (var i = 0; i < chipButtons.length; i++) {
-  chipButtons[i].onclick = function () {
-    filter = this.getAttribute('data-f');
-    for (var j = 0; j < chipButtons.length; j++) {
-      chipButtons[j].className = chipButtons[j] === this ? 'on' : '';
-    }
-    drawDash();
-  };
-}
 
 $('modeIn').onclick = function () { setMode('IN'); };
 $('modeOut').onclick = function () { setMode('OUT'); };
+
+$('avatar').onclick = function () {
+  var name = prompt('Your name', staffName());
+  if (!name || !name.trim()) return;
+  try { localStorage.setItem('attend_staff', name.trim()); } catch (e) {}
+  drawDash();
+};
+
+chipGroup('dChips', 'data-f', function (f) { dashFilter = f; drawDash(); });
+chipGroup('rChips', 'data-r', function (r) { rangeKey = r; drawReports(); });
+$('dSearch').oninput = drawDash;
+$('sSearch').oninput = drawStudents;
+$('rEvent').onchange = drawReports;
+$('rStudent').onchange = drawReports;
+
+$('tabDaily').onclick = function () {
+  reportTab = 'daily';
+  $('tabDaily').className = 'on';
+  $('tabSummary').className = '';
+  drawReports();
+};
+$('tabSummary').onclick = function () {
+  reportTab = 'summary';
+  $('tabSummary').className = 'on';
+  $('tabDaily').className = '';
+  drawReports();
+};
+$('export').onclick = downloadCsv;
+
+$('dClose').onclick = closeSheets;
+$('detail').onclick = function (e) { if (e.target === this) closeSheets(); };
+$('aCancel').onclick = closeSheets;
+
+$('addBtn').onclick = function () {
+  ['aId', 'aName', 'aYear', 'aCourse'].forEach(function (id) { $(id).value = ''; });
+  $('aMsg').textContent = '';
+  $('addForm').className = 'overlay';
+};
+
+$('aSave').onclick = function () {
+  var id = $('aId').value.trim();
+  var name = $('aName').value.trim();
+  var grade = $('aYear').value.trim();
+  var course = $('aCourse').value.trim();
+  if (!id || !name) {
+    $('aMsg').textContent = 'ID and name are required';
+    return;
+  }
+  if (students[id]) {
+    $('aMsg').textContent = 'That ID is already used';
+    return;
+  }
+  if (!navigator.onLine) {
+    $('aMsg').textContent = 'You need a connection to add a student';
+    return;
+  }
+  $('aMsg').textContent = 'Saving...';
+  call(API_URL, {
+    method: 'POST',
+    body: JSON.stringify({ key: KEY, action: 'addStudent', student: { id: id, name: name, grade: grade, course: course } })
+  }).then(function (res) {
+    if (!res.ok) {
+      var err = new Error(res.error);
+      err.fromServer = true;
+      throw err;
+    }
+    students[id] = { name: name, grade: grade, course: course };
+    var cache = load('attend_cache', null);
+    if (cache) {
+      cache.students.push([id, name, grade, course]);
+      save('attend_cache', cache);
+    }
+    closeSheets();
+    fillReportFilters();
+    redraw();
+  }).catch(function (err) {
+    $('aMsg').textContent = err.fromServer ? err.message : 'Could not save. Check your connection and try again.';
+  });
+};
 
 $('reload').onclick = function () {
   cleared = false;
@@ -625,16 +1229,18 @@ $('clear').onclick = function () {
   } catch (e) {}
   cleared = true;
   students = {};
-  studentCount = 0;
   events = [];
+  starts = {};
   serverScans = [];
   queue = [];
   done = {};
   fillEvents();
-  showCount();
+  fillReportFilters();
+  redraw();
   showStatus();
-  show('', 'Data cleared', 'Close the app. Tap Reload to download the list again.');
+  show('', 'Data cleared', 'Close the app. Tap Reload on the Students screen to download the list again.');
 };
+
 window.addEventListener('online', function () { showStatus(); tick(); });
 window.addEventListener('offline', showStatus);
 
