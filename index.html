@@ -156,6 +156,13 @@
   /* short messages */
   #toast { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%) translateY(16px); max-width: 90%; padding: 10px 16px; border-radius: 999px; background: #1e1b4b; color: #fff; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity 0.25s, transform 0.25s; z-index: 9; text-align: center; }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* import, edit and add forms */
+  textarea { width: 100%; font: inherit; font-size: 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); color: var(--text); resize: vertical; }
+  .acts { display: flex; gap: 8px; }
+  .addbtn.light { background: var(--soft); color: var(--accent); }
+  .msg { min-height: 22px; margin-bottom: 8px; font-size: 14px; color: #d63031; }
+  button:disabled { opacity: 0.5; }
 </style>
 </head>
 <body>
@@ -219,7 +226,10 @@
   <div id="p-students" class="hide">
     <div class="top">
       <div><h1>Students</h1><small id="sCount"></small></div>
-      <button id="addBtn" class="addbtn">+ Add</button>
+      <div class="acts">
+        <button id="impBtn" class="addbtn light">Import</button>
+        <button id="addBtn" class="addbtn">+ Add</button>
+      </div>
     </div>
     <input id="sSearch" placeholder="Search name or ID">
     <div id="sList"></div>
@@ -308,13 +318,17 @@
     </div>
     <div class="sub" id="dSum" style="margin-bottom:10px"></div>
     <div id="dHist"></div>
+    <div class="row" style="margin-top: 12px">
+      <button id="dEdit" style="flex: 1; width: auto">Edit</button>
+      <button id="dRemove" class="danger" style="flex: 1; width: auto">Remove</button>
+    </div>
   </div>
 </div>
 
 <!-- add a student -->
 <div id="addForm" class="overlay hide">
   <div class="sheet">
-    <div class="sheethead"><h2>Add student</h2></div>
+    <div class="sheethead"><h2 id="aTitle">Add student</h2></div>
     <input id="aId" placeholder="Student ID">
     <input id="aName" placeholder="Full name">
     <input id="aYear" placeholder="Year level (for example 1)">
@@ -352,6 +366,36 @@
   <div class="sheet">
     <div class="sheethead"><h2>Choose event</h2><button id="evClose">Close</button></div>
     <div id="evList"></div>
+    <button id="evAdd" class="addbtn" style="width: 100%; margin-top: 4px">+ Add event</button>
+  </div>
+</div>
+
+<!-- add an event -->
+<div id="eventForm" class="overlay hide">
+  <div class="sheet">
+    <div class="sheethead"><h2>Add event</h2></div>
+    <input id="eName" placeholder="Event name">
+    <small style="margin-bottom: 6px">Start time (optional, used to mark students Late)</small>
+    <input id="eStart" type="time">
+    <div id="eMsg" class="msg"></div>
+    <div class="row">
+      <button id="eSave" style="background: var(--accent); color: #fff; border: 0">Save</button>
+      <button id="eCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- import many students -->
+<div id="impForm" class="overlay hide">
+  <div class="sheet">
+    <div class="sheethead"><h2>Import students</h2></div>
+    <small style="margin-bottom: 8px; white-space: normal">One student per line: ID, Name, Year, Course. You can paste straight from Excel or Google Sheets.</small>
+    <textarea id="impText" rows="7" placeholder="2026-010, Lea Bautista, 2, BSN"></textarea>
+    <div id="impMsg" class="sub" style="white-space: normal; margin: 8px 0; min-height: 20px"></div>
+    <div class="row">
+      <button id="impGo" style="background: var(--accent); color: #fff; border: 0" disabled>Import</button>
+      <button id="impCancel">Cancel</button>
+    </div>
   </div>
 </div>
 
@@ -376,6 +420,9 @@ var cleared = false;
 var lastSync = 0;
 var evAsked = false;
 var toastTimer = null;
+var editing = null;
+var detailId = '';
+var importList = [];
 var mode = 'IN';
 var page = 'scan';
 var dashFilter = 'all';
@@ -891,6 +938,7 @@ function drawStudents() {
 }
 
 function openDetail(id) {
+  detailId = id;
   var s = students[id];
   var recs = buildRecords();
   var held = heldEvents(recs);
@@ -1187,6 +1235,66 @@ function drawSettings() {
   $('setInfo').textContent = text;
 }
 
+// sends one action to the Sheet; resolves with the reply, rejects with a readable message
+function post(body) {
+  body.key = KEY;
+  return call(API_URL, { method: 'POST', body: JSON.stringify(body) }).then(function (res) {
+    if (!res.ok) {
+      var err = new Error(res.error);
+      err.fromServer = true;
+      throw err;
+    }
+    return res;
+  });
+}
+
+function failText(err) {
+  if (err.fromServer) return err.message === 'bad key' ? 'Wrong secret key' : err.message;
+  return 'Could not save. Check your connection and try again.';
+}
+
+// changes the saved copy of the sheet data, so offline starts see it too
+function saveCache(change) {
+  var cache = load('attend_cache', null);
+  if (cache) {
+    change(cache);
+    save('attend_cache', cache);
+  }
+}
+
+// reads pasted lines into students. Tabs (from a spreadsheet) or commas both work.
+function parseStudents(text) {
+  var out = { ready: [], have: 0, bad: [] };
+  var seen = {};
+  text.split(/\r?\n/).forEach(function (line, i) {
+    if (!line.trim()) return;
+    var parts = line.indexOf('\t') > -1 ? line.split('\t') : line.split(',');
+    parts = parts.map(function (p) { return p.trim().replace(/^"|"$/g, ''); });
+    if (i === 0 && /^id$/i.test(parts[0])) return; // header row
+    if (!parts[0] || !parts[1]) {
+      out.bad.push(i + 1);
+      return;
+    }
+    if (students[parts[0]] || seen[parts[0]]) {
+      out.have++;
+      return;
+    }
+    seen[parts[0]] = true;
+    out.ready.push({ id: parts[0], name: parts[1], grade: parts[2] || '', course: parts[3] || '' });
+  });
+  return out;
+}
+
+function readImport() {
+  var out = parseStudents($('impText').value);
+  importList = out.ready;
+  var text = out.ready.length + ' ready to import';
+  if (out.have) text += ', ' + out.have + ' already in the list';
+  if (out.bad.length) text += ', ' + out.bad.length + ' skipped (line ' + out.bad.slice(0, 5).join(', ') + (out.bad.length > 5 ? '...' : '') + ')';
+  $('impMsg').textContent = $('impText').value.trim() ? text : '';
+  $('impGo').disabled = !out.ready.length;
+}
+
 function wakeAudio() {
   try {
     if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)();
@@ -1266,6 +1374,8 @@ function closeSheets() {
   $('detail').className = 'overlay hide';
   $('addForm').className = 'overlay hide';
   $('evSheet').className = 'overlay hide';
+  $('eventForm').className = 'overlay hide';
+  $('impForm').className = 'overlay hide';
 }
 
 function setMode(m) {
@@ -1388,9 +1498,51 @@ $('detail').onclick = function (e) { if (e.target === this) closeSheets(); };
 $('aCancel').onclick = closeSheets;
 
 $('addBtn').onclick = function () {
+  editing = null;
+  $('aTitle').textContent = 'Add student';
+  $('aId').readOnly = false;
   ['aId', 'aName', 'aYear', 'aCourse'].forEach(function (id) { $(id).value = ''; });
   $('aMsg').textContent = '';
+  closeSheets();
   $('addForm').className = 'overlay';
+};
+
+$('dEdit').onclick = function () {
+  var st = students[detailId];
+  if (!st) return;
+  editing = detailId;
+  closeSheets();
+  $('aTitle').textContent = 'Edit student';
+  $('aId').value = detailId;
+  $('aId').readOnly = true;
+  $('aName').value = st.name;
+  $('aYear').value = st.grade;
+  $('aCourse').value = st.course;
+  $('aMsg').textContent = '';
+  $('addForm').className = 'overlay';
+};
+
+$('dRemove').onclick = function () {
+  var st = students[detailId];
+  if (!st) return;
+  if (!confirm('Remove ' + st.name + '? Their past scans stay in the Sheet, and the row is kept in a Removed tab.')) return;
+  if (!navigator.onLine) {
+    toast('You need a connection to remove a student');
+    return;
+  }
+  var id = detailId;
+  post({ action: 'removeStudent', id: id }).then(function () {
+    delete students[id];
+    saveCache(function (c) {
+      c.students = c.students.filter(function (r) { return r[0] !== id; });
+    });
+    closeSheets();
+    fillReportFilters();
+    redraw();
+    toast('Student removed');
+  }).catch(function (err) {
+    toast(failText(err));
+  });
 };
 
 $('aSave').onclick = function () {
@@ -1402,36 +1554,114 @@ $('aSave').onclick = function () {
     $('aMsg').textContent = 'ID and name are required';
     return;
   }
-  if (students[id]) {
+  if (!editing && students[id]) {
     $('aMsg').textContent = 'That ID is already used';
     return;
   }
   if (!navigator.onLine) {
-    $('aMsg').textContent = 'You need a connection to add a student';
+    $('aMsg').textContent = 'You need a connection to save';
     return;
   }
   $('aMsg').textContent = 'Saving...';
-  call(API_URL, {
-    method: 'POST',
-    body: JSON.stringify({ key: KEY, action: 'addStudent', student: { id: id, name: name, grade: grade, course: course } })
-  }).then(function (res) {
-    if (!res.ok) {
-      var err = new Error(res.error);
-      err.fromServer = true;
-      throw err;
-    }
+  var student = { id: id, name: name, grade: grade, course: course };
+  post({ action: editing ? 'editStudent' : 'addStudent', student: student }).then(function () {
     students[id] = { name: name, grade: grade, course: course };
-    var cache = load('attend_cache', null);
-    if (cache) {
-      cache.students.push([id, name, grade, course]);
-      save('attend_cache', cache);
-    }
+    saveCache(function (c) {
+      var row = [id, name, grade, course];
+      var at = c.students.findIndex(function (r) { return r[0] === id; });
+      if (at > -1) c.students[at] = row;
+      else c.students.push(row);
+    });
     closeSheets();
     fillReportFilters();
     redraw();
-    toast('Student added');
+    toast(editing ? 'Student updated' : 'Student added');
   }).catch(function (err) {
-    $('aMsg').textContent = err.fromServer ? err.message : 'Could not save. Check your connection and try again.';
+    $('aMsg').textContent = failText(err);
+  });
+};
+
+$('impBtn').onclick = function () {
+  $('impText').value = '';
+  readImport();
+  closeSheets();
+  $('impForm').className = 'overlay';
+};
+$('impCancel').onclick = closeSheets;
+$('impText').oninput = readImport;
+
+$('impGo').onclick = function () {
+  if (!importList.length) return;
+  if (!navigator.onLine) {
+    $('impMsg').textContent = 'You need a connection to import';
+    return;
+  }
+  var list = importList.slice();
+  var added = 0;
+  $('impGo').disabled = true;
+  $('impMsg').textContent = 'Importing...';
+  var chain = Promise.resolve();
+  for (var i = 0; i < list.length; i += 200) {
+    (function (part) {
+      chain = chain.then(function () {
+        return post({ action: 'addStudents', students: part }).then(function (res) { added += res.added; });
+      });
+    })(list.slice(i, i + 200));
+  }
+  chain.then(function () {
+    closeSheets();
+    toast('Added ' + added + ' students');
+    loadAll();
+  }).catch(function (err) {
+    $('impMsg').textContent = 'Added ' + added + ' before it stopped. ' + failText(err);
+    $('impGo').disabled = false;
+    loadAll();
+  });
+};
+
+$('evAdd').onclick = function () {
+  $('eName').value = '';
+  $('eStart').value = '';
+  $('eMsg').textContent = '';
+  closeSheets();
+  $('eventForm').className = 'overlay';
+};
+$('eCancel').onclick = closeSheets;
+
+$('eSave').onclick = function () {
+  var name = $('eName').value.trim();
+  if (!name) {
+    $('eMsg').textContent = 'Give the event a name';
+    return;
+  }
+  var dupe = events.some(function (e) { return e.toLowerCase() === name.toLowerCase(); });
+  if (dupe) {
+    $('eMsg').textContent = 'That event already exists';
+    return;
+  }
+  if (!navigator.onLine) {
+    $('eMsg').textContent = 'You need a connection to add an event';
+    return;
+  }
+  $('eMsg').textContent = 'Saving...';
+  post({ action: 'addEvent', event: { name: name, start: $('eStart').value } }).then(function (res) {
+    events.push(res.name);
+    if (res.start) starts[res.name] = res.start;
+    saveCache(function (c) {
+      c.events.push(res.name);
+      if (res.start) {
+        c.starts = c.starts || {};
+        c.starts[res.name] = res.start;
+      }
+    });
+    fillEvents();
+    fillReportFilters();
+    $('event').value = res.name;
+    $('event').onchange();
+    closeSheets();
+    toast('Event added');
+  }).catch(function (err) {
+    $('eMsg').textContent = failText(err);
   });
 };
 
